@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Portrait-le"
 config/features=PackedStringArray("4.4", "Mobile")
-config/icon="res://icon.svg"
+config/icon="res://asserts/icon.svg"
 
 [rendering]
 
