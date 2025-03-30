@@ -21,6 +21,8 @@ MonoBehaviour:
   m_OverrideGlobalSceneList: 1
   m_Scenes:
   - m_enabled: 1
+    m_path: Assets/Scenes/ImageCaptureTestScene.unity
+  - m_enabled: 1
     m_path: Assets/Scenes/ImageCaptureScene.unity
   - m_enabled: 1
     m_path: Assets/Scenes/MainGameScene.unity

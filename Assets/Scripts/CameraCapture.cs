@@ -7,31 +7,58 @@ using UnityEngine.Android;
 #endif
 
 
-public class CameraStreamTest : MonoBehaviour
+public class CameraCapture : MonoBehaviour
 {
-    public Button rotateButton;
+    // rotationMaterial has RotateUVShader
+    public Material rotationMaterial;
+    
+    private Canvas canvas;
     private RawImage rawImage;
     private AspectRatioFitter aspectFitter;
+    
+    private Button cancelButton;
+    private Button captureButton;
+    private Button rotateButton;
+    
     private WebCamTexture webcamTexture;
     private WebCamDevice[] cameras;
     private int currentCameraIndex = 0;
     private bool initialized = false;
-    private float targetAspectRatio = 0.618f; // golden ratio
+    private const float goldenRatio = 1.618f;
+    private float targetAspectRatio = 1.0f / goldenRatio;
     private bool isGyroSupported = false;
     private bool isPortrait = true;
     private float currentAngle = 0f;
     private bool cameraReady = false;
+
+    private CameraToImageTest tester;
     
-    void Start()
+    void Awake()
     {
-        rawImage = GetComponent<RawImage>();
-        aspectFitter = GetComponent<AspectRatioFitter>();
-        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
-        Debug.Log("RawImage dimensions: " + rawImage.rectTransform.rect.width + " x " + rawImage.rectTransform.rect.height);
-        Initialize(1.0f);
+        Transform myTransform = this.gameObject.transform;
+        canvas = myTransform.GetChild(0).GetComponent<Canvas>();
         
+        // CameraFootage, then Buttons_HBox
+        Transform cameraFootage = myTransform.Find("CameraFootage");
+        rawImage = cameraFootage.GetComponent<RawImage>();
+        aspectFitter = cameraFootage.GetComponent<AspectRatioFitter>();
+        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+
+        Transform buttonsHBox = myTransform.Find("ButtonsHBox");
+        cancelButton = buttonsHBox.Find("CancelButton").GetComponent<Button>();
+        captureButton = buttonsHBox.Find("CaptureButton").GetComponent<Button>();
+        rotateButton = buttonsHBox.Find("RotateButton").GetComponent<Button>();
+        
+        if(cancelButton != null)
+            cancelButton.onClick.AddListener(ExitCamera);
+        if (captureButton != null)
+            captureButton.onClick.AddListener(CaptureImage);
         if (rotateButton != null)
             rotateButton.onClick.AddListener(SwitchCamera);
+        
+                
+        // note: ratio should not go below 0.6f, otherwise UI will overlap
+        // Initialize(1.0f / goldenRatio,);
     }
 
     void Update()
@@ -58,6 +85,29 @@ public class CameraStreamTest : MonoBehaviour
         return yaw;
     }
 
+    void ExitCamera()
+    {
+        
+        if (webcamTexture == null || !webcamTexture.isPlaying)
+            return;
+
+        if (tester == null)
+            return;
+
+        tester.WriteCapturedImage(null);
+    }
+    
+    void CaptureImage()
+    {
+        if (webcamTexture == null || !webcamTexture.isPlaying)
+            return;
+
+        if (tester == null)
+            return;
+
+        tester.WriteCapturedImage(rawImage.mainTexture);
+    }
+    
     void SwitchCamera()
     {
         currentCameraIndex += 1;
@@ -73,23 +123,70 @@ public class CameraStreamTest : MonoBehaviour
             webcamTexture.Stop();
         
         currentCameraIndex = index % cameras.Length;
-        string camName = cameras[currentCameraIndex].name;
+        WebCamDevice device = cameras[currentCameraIndex];
+        string camName = device.name;
         Debug.Log("Launching camera: " + camName);
         webcamTexture = new WebCamTexture(camName);
-        rawImage.texture = webcamTexture;
         webcamTexture.Play();
-
-        cameraReady = true;
+        rawImage.texture = webcamTexture;
         
-        // print rawImage's actual dimensions
-        Debug.Log("RawImage dimensions: " + rawImage.rectTransform.rect.width + " x " + rawImage.rectTransform.rect.height);
-    }
+        rawImage.material = rotationMaterial;
+        // rotate 90 / -90 degrees depending on camera facing
+        float angle = cameras[currentCameraIndex].isFrontFacing ? -90f : 90f;
+        rotationMaterial.SetFloat("_Rotation", angle);
+        
+        StartCoroutine(CropCameraTextureAndReady());
+      }
     
+    private IEnumerator CropCameraTextureAndReady()
+    {
+        // Wait for the webcam texture to initialize
+        yield return new WaitUntil(() => webcamTexture.width > 100);
+
+        float textureRatio = (float)webcamTexture.width / webcamTexture.height;
+        textureRatio = 1.0f / textureRatio; // due to us rotating the texture
+        // priont texture ratio
+        if (textureRatio < targetAspectRatio)
+        {
+            // crop top and bottom
+            float H = textureRatio / targetAspectRatio;
+            rawImage.uvRect = new Rect(0f, (1f - H) / 2f, 1f, H);
+        }
+        else if (textureRatio > targetAspectRatio)
+        {
+            // crop left and right
+            float W = targetAspectRatio / textureRatio;
+            rawImage.uvRect = new Rect((1f - W) / 2f, 0f, W, 1f);
+        }
+        else
+        {
+            // no cropping needed
+            rawImage.uvRect = new Rect(0f, 0f, 1f, 1f);
+        }
+        
+        WebCamDevice device = cameras[currentCameraIndex];
+        string camName = device.name;
+        Debug.Log("Launching camera: " + camName);
+        webcamTexture = new WebCamTexture(camName);
+        webcamTexture.Play();
+        rawImage.texture = webcamTexture;
+        
+        rawImage.material = rotationMaterial;
+        // rotate 90 / -90 degrees depending on camera facing
+        float angle = cameras[currentCameraIndex].isFrontFacing ? -90f : 90f;
+        rotationMaterial.SetFloat("_Rotation", angle);
+        
+        cameraReady = true;
+    }
+
     
     #region Public methods
 
-    public void Initialize(float aspectRatio) // golden ratio
+    public void Initialize(float aspectRatio, Camera canvasCamera, CameraToImageTest tester)
     {
+        canvas.worldCamera = canvasCamera;
+        this.tester = tester;
+        
         // reset to false, incase initialization of camera fails
         initialized = false;
         
