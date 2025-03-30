@@ -15,7 +15,8 @@ public class CameraCapture : MonoBehaviour
     private Canvas canvas;
     private RawImage rawImage;
     private AspectRatioFitter aspectFitter;
-    
+
+    private Transform buttonsHBox;
     private Button cancelButton;
     private Button captureButton;
     private Button rotateButton;
@@ -45,7 +46,7 @@ public class CameraCapture : MonoBehaviour
         aspectFitter = cameraFootage.GetComponent<AspectRatioFitter>();
         aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
 
-        Transform buttonsHBox = canvasTransform.Find("ButtonsHBox");
+        buttonsHBox = canvasTransform.Find("ButtonsHBox");
         cancelButton = buttonsHBox.Find("CancelButton").GetComponent<Button>();
         captureButton = buttonsHBox.Find("CaptureButton").GetComponent<Button>();
         rotateButton = buttonsHBox.Find("RotateButton").GetComponent<Button>();
@@ -72,6 +73,7 @@ public class CameraCapture : MonoBehaviour
         currentAngle = GetDeviceYaw();
         Debug.Log("Yaw: " + currentAngle);
     }
+    
     
     private float GetDeviceYaw() // Yaw is accountable for device orientation
     {
@@ -106,46 +108,41 @@ public class CameraCapture : MonoBehaviour
         if (tester == null)
             return;
 
-        Rect uv = rawImage.uvRect;
-
-        int cropX = Mathf.FloorToInt(uv.x * webcamTexture.width);
-        int cropY = Mathf.FloorToInt(uv.y * webcamTexture.height);
-        int cropWidth = Mathf.FloorToInt(uv.width * webcamTexture.width);
-        int cropHeight = Mathf.FloorToInt(uv.height * webcamTexture.height);
-
-        // Clamp to texture bounds
-        cropX = Mathf.Clamp(cropX, 0, webcamTexture.width - 1);
-        cropY = Mathf.Clamp(cropY, 0, webcamTexture.height - 1);
-        cropWidth = Mathf.Clamp(cropWidth, 1, webcamTexture.width - cropX);
-        cropHeight = Mathf.Clamp(cropHeight, 1, webcamTexture.height - cropY);
-
-        // Color[] pixels = webcamTexture.GetPixels(cropX, cropY, cropWidth, cropHeight);
-        // flip X and Y because of rotation
-        Color[] pixels = webcamTexture.GetPixels(cropY, cropX, cropHeight, cropWidth);
+        RectTransform rectTransform = rawImage.rectTransform;
+        Canvas canvas = rawImage.canvas;
+        Camera cam = canvas.worldCamera;
         
-        Color[] RotatePixels(Color[] pixels, int width, int height, bool clockwise)
+        Vector3[] corners = new Vector3[4];
+        rectTransform.GetWorldCorners(corners);
+
+        // Convert world corners to screen space
+        Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
+        Vector2 topRight = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
+
+        int width = Mathf.RoundToInt(topRight.x - bottomLeft.x);
+        int height = Mathf.RoundToInt(topRight.y - bottomLeft.y);
+
+        if (width <= 0 || height <= 0)
         {
-            Color[] rotated = new Color[pixels.Length];
-            for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-            {
-                int srcIndex = y * width + x;
-                int dstIndex = clockwise
-                    ? x * height + (height - 1 - y)
-                    : (width - 1 - x) * height + y;
-                rotated[dstIndex] = pixels[srcIndex];
-            }
-            return rotated;
+            Debug.LogWarning("RawImage is off-screen or too small to capture.");
+            return;
         }
-        
-        // retrieve angle from shader (or we could check device again)
-        float angle = rotationMaterial.GetFloat("_Rotation");
-        bool clockWise = angle > 0f;
-        Color[] rotatedPixels = RotatePixels(pixels, cropWidth, cropHeight , clockWise);
-        
-        Texture2D result = new Texture2D(cropWidth, cropHeight, TextureFormat.RGBA32, false);
-        result.SetPixels(rotatedPixels);
+
+        RenderTexture rt = new RenderTexture(Screen.width, Screen.height, 24);
+        Texture2D result = new Texture2D(width, height, TextureFormat.RGBA32, false);
+
+        cam.targetTexture = rt;
+        cam.Render();
+
+        RenderTexture.active = rt;
+
+        // Read pixels from screen space
+        result.ReadPixels(new Rect(bottomLeft.x, bottomLeft.y, width, height), 0, 0);
         result.Apply();
+
+        cam.targetTexture = null;
+        RenderTexture.active = null;
+        Destroy(rt);
         
         tester.WriteCapturedImage(result);
     }
@@ -233,12 +230,15 @@ public class CameraCapture : MonoBehaviour
         initialized = false;
         
         targetAspectRatio = aspectRatio;
-        
+
+        #if UNITY_ANDROID
         if (!Permission.HasUserAuthorizedPermission(Permission.Camera))
             AskCameraPermission();
         else
             InitializeCamera();
-
+        #else
+            InitializeCamera();
+        #endif
         if (SystemInfo.supportsGyroscope)
         {
             Input.gyro.enabled = true;
@@ -247,6 +247,7 @@ public class CameraCapture : MonoBehaviour
         else
             Debug.LogWarning("Gyroscope not supported on this device.");
     }
+
     
     #endregion
     
@@ -291,7 +292,7 @@ public class CameraCapture : MonoBehaviour
         initialized = true;
     }
     
-    
+    #if UNITY_ANDROID
     // Android specific helpers
     private void AskCameraPermission()
     {
@@ -316,5 +317,7 @@ public class CameraCapture : MonoBehaviour
         yield return null;
         InitializeCamera();
     }
+    #endif
+    
     #endregion
 }

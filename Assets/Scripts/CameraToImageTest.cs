@@ -15,8 +15,8 @@ public class CameraToImageTest : MonoBehaviour
     private AspectRatioFitter aspectFitter;
 
     private GameObject imageCaptureOverlay;
-    
-    private float targetAspectRatio = 1.0f / 1.618f;
+
+    private float targetAspectRatio = 2.0f; // 1.0f / 1.618f;
         
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -24,6 +24,8 @@ public class CameraToImageTest : MonoBehaviour
         sceneCamera = Camera.main;
         capturedImage = capturedImageObject.GetComponent<RawImage>();
         aspectFitter = capturedImageObject.GetComponent<AspectRatioFitter>();
+        aspectFitter.aspectRatio = targetAspectRatio;
+        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
     
         toCameraButton.onClick.AddListener(TryCaptureImage);
     }
@@ -47,10 +49,9 @@ public class CameraToImageTest : MonoBehaviour
     public void WriteCapturedImage(Texture texture)
     {
         capturedImage.texture = texture;
-        aspectFitter.aspectRatio = targetAspectRatio;
-        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
-        
+
         Destroy(imageCaptureOverlay);
+        imageCaptureOverlay = null;
         
         toCameraButton.gameObject.SetActive(true);
     }
