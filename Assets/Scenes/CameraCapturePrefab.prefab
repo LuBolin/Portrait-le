@@ -879,7 +879,6 @@ GameObject:
   - component: {fileID: 7275092755976893581}
   - component: {fileID: 4687561135936549998}
   - component: {fileID: 2656565952100101602}
-  - component: {fileID: 2626374271897357912}
   - component: {fileID: 7423471233635105598}
   m_Layer: 5
   m_Name: CameraFootage
@@ -942,19 +941,6 @@ MonoBehaviour:
     y: 0
     width: 1
     height: 1
---- !u!114 &2626374271897357912
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8540629606773278373}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c244251e5b464be43bc96b822a47bd00, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  rotationMaterial: {fileID: 2100000, guid: 3c46a8688625eb54c9d89eb803ae823e, type: 2}
 --- !u!114 &7423471233635105598
 MonoBehaviour:
   m_ObjectHideFlags: 0

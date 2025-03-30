@@ -1,3 +1,5 @@
+using System;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,6 +13,8 @@ public class CameraToImageTest : MonoBehaviour
     private Camera sceneCamera;
     private RawImage capturedImage;
     private AspectRatioFitter aspectFitter;
+
+    private GameObject imageCaptureOverlay;
     
     private float targetAspectRatio = 1.0f / 1.618f;
         
@@ -19,8 +23,8 @@ public class CameraToImageTest : MonoBehaviour
     {
         sceneCamera = Camera.main;
         capturedImage = capturedImageObject.GetComponent<RawImage>();
-        aspectFitter = gameObject.GetComponent<AspectRatioFitter>();
-        
+        aspectFitter = capturedImageObject.GetComponent<AspectRatioFitter>();
+    
         toCameraButton.onClick.AddListener(TryCaptureImage);
     }
 
@@ -34,7 +38,7 @@ public class CameraToImageTest : MonoBehaviour
     {
         toCameraButton.gameObject.SetActive(false);
         
-        GameObject imageCaptureOverlay = Instantiate(imageCapturePrefab);
+        imageCaptureOverlay = Instantiate(imageCapturePrefab);
         CameraCapture cameraCapture = imageCaptureOverlay.GetComponent<CameraCapture>();
         
         cameraCapture.Initialize(targetAspectRatio, sceneCamera, this);
@@ -42,10 +46,11 @@ public class CameraToImageTest : MonoBehaviour
     
     public void WriteCapturedImage(Texture texture)
     {
-        // Set the aspect ratio of th
         capturedImage.texture = texture;
         aspectFitter.aspectRatio = targetAspectRatio;
         aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+        
+        Destroy(imageCaptureOverlay);
         
         toCameraButton.gameObject.SetActive(true);
     }

@@ -35,16 +35,17 @@ public class CameraCapture : MonoBehaviour
     
     void Awake()
     {
-        Transform myTransform = this.gameObject.transform;
-        canvas = myTransform.GetChild(0).GetComponent<Canvas>();
+        Transform myTransform = gameObject.transform;
+        Transform canvasTransform = myTransform.Find("Canvas");
+        canvas = canvasTransform.GetComponent<Canvas>();
         
         // CameraFootage, then Buttons_HBox
-        Transform cameraFootage = myTransform.Find("CameraFootage");
+        Transform cameraFootage = canvasTransform.Find("CameraFootage");
         rawImage = cameraFootage.GetComponent<RawImage>();
         aspectFitter = cameraFootage.GetComponent<AspectRatioFitter>();
         aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
 
-        Transform buttonsHBox = myTransform.Find("ButtonsHBox");
+        Transform buttonsHBox = canvasTransform.Find("ButtonsHBox");
         cancelButton = buttonsHBox.Find("CancelButton").GetComponent<Button>();
         captureButton = buttonsHBox.Find("CaptureButton").GetComponent<Button>();
         rotateButton = buttonsHBox.Find("RotateButton").GetComponent<Button>();
@@ -105,7 +106,48 @@ public class CameraCapture : MonoBehaviour
         if (tester == null)
             return;
 
-        tester.WriteCapturedImage(rawImage.mainTexture);
+        Rect uv = rawImage.uvRect;
+
+        int cropX = Mathf.FloorToInt(uv.x * webcamTexture.width);
+        int cropY = Mathf.FloorToInt(uv.y * webcamTexture.height);
+        int cropWidth = Mathf.FloorToInt(uv.width * webcamTexture.width);
+        int cropHeight = Mathf.FloorToInt(uv.height * webcamTexture.height);
+
+        // Clamp to texture bounds
+        cropX = Mathf.Clamp(cropX, 0, webcamTexture.width - 1);
+        cropY = Mathf.Clamp(cropY, 0, webcamTexture.height - 1);
+        cropWidth = Mathf.Clamp(cropWidth, 1, webcamTexture.width - cropX);
+        cropHeight = Mathf.Clamp(cropHeight, 1, webcamTexture.height - cropY);
+
+        // Color[] pixels = webcamTexture.GetPixels(cropX, cropY, cropWidth, cropHeight);
+        // flip X and Y because of rotation
+        Color[] pixels = webcamTexture.GetPixels(cropY, cropX, cropHeight, cropWidth);
+        
+        Color[] RotatePixels(Color[] pixels, int width, int height, bool clockwise)
+        {
+            Color[] rotated = new Color[pixels.Length];
+            for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                int srcIndex = y * width + x;
+                int dstIndex = clockwise
+                    ? x * height + (height - 1 - y)
+                    : (width - 1 - x) * height + y;
+                rotated[dstIndex] = pixels[srcIndex];
+            }
+            return rotated;
+        }
+        
+        // retrieve angle from shader (or we could check device again)
+        float angle = rotationMaterial.GetFloat("_Rotation");
+        bool clockWise = angle > 0f;
+        Color[] rotatedPixels = RotatePixels(pixels, cropWidth, cropHeight , clockWise);
+        
+        Texture2D result = new Texture2D(cropWidth, cropHeight, TextureFormat.RGBA32, false);
+        result.SetPixels(rotatedPixels);
+        result.Apply();
+        
+        tester.WriteCapturedImage(result);
     }
     
     void SwitchCamera()
@@ -230,6 +272,7 @@ public class CameraCapture : MonoBehaviour
         }
         
         // find first front facing (selfie) camera if possible
+        
         bool frontFacingFound = false;
         for (int i = 0; i < cameras.Length; i++)
         {
@@ -242,9 +285,8 @@ public class CameraCapture : MonoBehaviour
         }
         if (!frontFacingFound)
             currentCameraIndex = 0;
-
-        aspectFitter.aspectRatio = targetAspectRatio;
         
+        aspectFitter.aspectRatio = targetAspectRatio;
         LaunchCamera(currentCameraIndex);
         initialized = true;
     }
