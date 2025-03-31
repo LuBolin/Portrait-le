@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,6 +20,8 @@ public class MasterController : MonoBehaviour
     private const float SATURATION_TOLERANCE = 0.2f; // varies to lighting & transparency
     private const float VALUE_TOLERANCE = 0.2f; // varies to lighting & transparency
     
+    //  For Debug
+    [SerializeField] public bool canSeeGroundTruth;
     
     // Truth related
     private Texture2D groundTruthImage;
@@ -53,7 +56,7 @@ public class MasterController : MonoBehaviour
     private string[] portraitNames;
     
     void Start()
-    {
+    {   
         SetupUI();
         
         LoadPortraitsFromResources();
@@ -89,6 +92,12 @@ public class MasterController : MonoBehaviour
         AspectRatioFitter fitter = mainImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
         fitter.aspectRatio = groundTruthAspectRatio;
         
+        //  for ethan debugging
+        if (canSeeGroundTruth) {
+            mainImage.texture = answerImage;
+            return ;
+        }
+
         currentUnionedMatchedPixelCount = 0;
         imageHistory = new Texture2D[2 * MAX_IMAGE_TRIES];
         nameHistory = new string[MAX_TEXT_TRIES];
@@ -278,7 +287,7 @@ public class MasterController : MonoBehaviour
 
     (string name, Texture2D texture) GetRandomPortrait()
     {
-        int randomIndex = Random.Range(0, portraitNames.Length);
+        int randomIndex = UnityEngine.Random.Range(0, portraitNames.Length);
         return GetPortraitByIndex(randomIndex);
     }
     
