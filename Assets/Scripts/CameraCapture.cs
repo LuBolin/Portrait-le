@@ -192,19 +192,14 @@ public class CameraCapture : MonoBehaviour
             yield break;
         }
         
-        Debug.Log("Current camera texture: " + webcamTexture);
-        Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
-        Debug.Log("Current camera texture width: " + webcamTexture.width);
-        Debug.Log("Current camera texture height: " + webcamTexture.height);
+        // Debug.Log("Current camera texture: " + webcamTexture);
+        // Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
+        // Debug.Log("Current camera texture width: " + webcamTexture.width);
+        // Debug.Log("Current camera texture height: " + webcamTexture.height);
         
 
         float textureRatio = (float)webcamTexture.width / webcamTexture.height;
         textureRatio = 1.0f / textureRatio; // due to us rotating the texture
-        // priont texture ratio
-        
-        // debug log the 2 ratios
-        Debug.Log("Texture ratio: " + textureRatio);
-        Debug.Log("Target ratio: " + targetAspectRatio);
         
         if (textureRatio < targetAspectRatio)
         {
