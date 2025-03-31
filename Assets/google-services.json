@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "340428843052",
+    "project_id": "century-2025",
+    "storage_bucket": "century-2025.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:340428843052:android:71f82747843608a3b18989",
+        "android_client_info": {
+          "package_name": "com.DefaultCompany.com.unity.template.mobile2D"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnATPn3vDklXJyCSm_nwWK9ND-ujRE55M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,9 +1,16 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
+using Firebase.Firestore;
 using Button = UnityEngine.UI.Button;
+using System.Threading.Tasks;
+using UnityEngine.Networking;
+using Firebase.Extensions;
+using System.IO;
+using System.Linq;
 
 
 public class MasterController : MonoBehaviour
@@ -20,6 +27,11 @@ public class MasterController : MonoBehaviour
     private const float SATURATION_TOLERANCE = 0.2f; // varies to lighting & transparency
     private const float VALUE_TOLERANCE = 0.2f; // varies to lighting & transparency
     
+    private const string CACHE_FOLDER = "DailyImageCache";
+    private const string FB_TODAY_DOCUMENT = "today";
+    private const string FB_COLLECTION = "portraits" ;
+    private const string FB_DOCUMENT_NAME = "name" ;
+    private const string FB_DOCUMENT_STORAGE = "mediaURL" ;
     //  For Debug
     [SerializeField] public bool canSeeGroundTruth;
     
@@ -54,18 +66,221 @@ public class MasterController : MonoBehaviour
     private const string PORTRAIT_DATA_PATH = "Portraits";
     private Dictionary<string, Texture2D> portraitData;
     private string[] portraitNames;
+
+    // Firebase
+    private FirebaseFirestore fbFirestore;
     
     void Start()
     {   
         SetupUI();
+
+        SetupFirebase();
         
-        LoadPortraitsFromResources();
+        // LoadPortraitsFromResources();
 
         (string portraitName, Texture2D portraitTexture) = GetRandomPortrait();
         SetTruth(portraitName, portraitTexture);
     }
 
+    void SetupFirebase() {
+        fbFirestore = FirebaseFirestore.DefaultInstance;
+
+        StartCoroutine(LoadTodayPortrait());
+    }
+
+    public void UpdateDailyPortraitButton() {
+        StartCoroutine(UpdateDailyPortrait());
+    }
+
+    IEnumerator LoadTodayPortrait() {
+        string todayKey = DateTime.Today.ToString("yyyy-MM-dd");      
+        // 1. Check cache first
+        (Texture2D, string) cachedData = TryGetCachedImage(todayKey);
+        if (cachedData.Item1 != null && cachedData.Item2 != null)
+        {
+            SetTruth(cachedData.Item2, cachedData.Item1);
+            yield break;
+        }
+
+        // 2. Not cached - download fresh
+        yield return StartCoroutine(DownloadAndCache(todayKey));
+        
+        // 3. Verify download succeeded by checking cache again
+        (Texture2D, string) newData = TryGetCachedImage(todayKey);
+        if (newData.Item1 != null && newData.Item2 != null)
+        {
+            SetTruth(newData.Item2, newData.Item1);
+        }
+        else
+        {
+            Debug.LogError("Failed to download and cache today's portrait");
+        }
+    }
+
+
+
+    private (Texture2D, string) TryGetCachedImage(string dateKey)
+    {
+        string imagePath = Path.Combine(Application.persistentDataPath, CACHE_FOLDER, $"{dateKey}.jpg");
+        string metaPath = Path.Combine(Application.persistentDataPath, CACHE_FOLDER, $"{dateKey}.meta");
+
+        if (File.Exists(imagePath) && File.Exists(metaPath))
+        {
+            try
+            {
+                byte[] imageData = File.ReadAllBytes(imagePath);
+                Texture2D texture = new Texture2D(2, 2);
+                texture.LoadImage(imageData);
+
+                string metaData = File.ReadAllText(metaPath);
+                
+                Debug.Log($"Loaded cached image and text for {dateKey}");
+                return (texture, metaData);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Failed to load cached image: {e.Message}");
+                return (null, null);
+            }
+        }
+        return (null, null);
+    }
+
+
+    IEnumerator DownloadAndCache(string dateKey) {
+        // get the document named "today" from "/portraits"
+        DocumentReference portraitsRef = fbFirestore.Collection(FB_COLLECTION).Document(FB_TODAY_DOCUMENT);
+        Debug.Log("fetching firebase stuff");
+        var tcs = new TaskCompletionSource<DocumentSnapshot>();
+            
+        // Start the Firestore request
+        portraitsRef.GetSnapshotAsync().ContinueWithOnMainThread(task =>
+        {
+            if (task.IsFaulted) {
+                Debug.LogError("Firestore error: " + task.Exception);
+                tcs.SetException(task.Exception);
+            } else if (task.IsCanceled) {
+                Debug.LogWarning("Firestore request canceled");
+                tcs.SetCanceled();
+            } else{
+                tcs.SetResult(task.Result);
+            }
+        });
+
+        yield return new WaitUntil(() => tcs.Task.IsCompleted);
+
+        // Process the result
+        if (tcs.Task.IsCompletedSuccessfully)
+        {
+            DocumentSnapshot snapshot = tcs.Task.Result;
+            
+            if (snapshot.Exists)
+            {
+                Debug.Log($"Document data for {snapshot.Id}:");
+                Dictionary<string, object> portraitDict = snapshot.ToDictionary();
+                
+                foreach (var pair in portraitDict)
+                {
+                    Debug.Log($"{pair.Key}: {pair.Value}");
+                }
+
+                // Download the image
+                yield return StartCoroutine(DownloadAndCache((string)portraitDict[FB_DOCUMENT_STORAGE], (string) portraitDict[FB_DOCUMENT_NAME], dateKey));
+            }
+            else
+            {
+                Debug.Log($"Document {snapshot.Id} does not exist!");
+            }
+        }
+        else if (tcs.Task.IsFaulted)
+        {
+            Debug.LogError("Failed to get portrait: " + tcs.Task.Exception);
+        }
+        
+    }
     
+    // takes a URL and downloads image, saves to persistentDataPath/today.jpg
+    IEnumerator DownloadAndCache(string mediaURL, string name, string dateKey){   
+        string cacheDir = Path.Combine(Application.persistentDataPath, CACHE_FOLDER);
+        string imagePath = Path.Combine(cacheDir, $"{dateKey}.jpg");
+        string metaPath = Path.Combine(cacheDir, $"{dateKey}.meta");
+
+        UnityWebRequest request = UnityWebRequestTexture.GetTexture(mediaURL);
+        Texture2D downloadedTexture;
+        yield return request.SendWebRequest();
+        if(request.isNetworkError || request.isHttpError) 
+            Debug.Log(request.error);
+        else {
+            Debug.Log(Application.persistentDataPath);
+
+            if (!Directory.Exists(cacheDir))
+            {
+                Directory.CreateDirectory(cacheDir);
+            }
+
+            downloadedTexture = ((DownloadHandlerTexture) request.downloadHandler).texture;
+            File.WriteAllBytes(imagePath, downloadedTexture.EncodeToJPG());
+            File.WriteAllText(metaPath, name);
+
+            Debug.Log("download complete");
+        }
+    } 
+
+  public IEnumerator UpdateDailyPortrait() {
+        // 1. Get all portrait documents
+        Task<QuerySnapshot> getAllTask = fbFirestore.Collection(FB_COLLECTION).GetSnapshotAsync();
+        yield return new WaitUntil(() => getAllTask.IsCompleted);
+
+        if (getAllTask.IsFaulted) {
+            Debug.LogError("Failed to get portraits: " + getAllTask.Exception);
+            yield break;
+        }
+
+        QuerySnapshot allPortraits = getAllTask.Result;
+        List<DocumentSnapshot> portraitsList = allPortraits.Documents.ToList();
+
+        // Remove the daily document from the random selection
+        portraitsList.RemoveAll(doc => doc.Id == FB_TODAY_DOCUMENT);
+
+        if (portraitsList.Count == 0)
+        {
+            Debug.LogWarning("No portraits available for swapping");
+            yield break;
+        }
+
+        // 2. Select a random portrait
+        int randomIndex = UnityEngine.Random.Range(0, portraitsList.Count);
+        DocumentSnapshot randomPortrait = portraitsList[randomIndex];
+        Dictionary<string, object> randomData = randomPortrait.ToDictionary();
+
+        // 3. Get current daily portrait data
+        Task<DocumentSnapshot> getDailyTask = fbFirestore.Collection(FB_COLLECTION).Document(FB_TODAY_DOCUMENT).GetSnapshotAsync();
+        yield return new WaitUntil(() => getDailyTask.IsCompleted);
+
+        if (!getDailyTask.Result.Exists)
+        {
+            Debug.LogError("Daily portrait document doesn't exist");
+            yield break;
+        }
+
+        Dictionary<string, object> dailyData = getDailyTask.Result.ToDictionary();
+
+        // 4. Perform the swap
+        Task swapTask1 = fbFirestore.Collection(FB_COLLECTION).Document(FB_TODAY_DOCUMENT).SetAsync(randomData);
+        Task swapTask2 = fbFirestore.Collection(FB_COLLECTION).Document(randomPortrait.Id).SetAsync(dailyData);
+
+        yield return new WaitUntil(() => swapTask1.IsCompleted && swapTask2.IsCompleted);
+
+        if (swapTask1.IsCompletedSuccessfully && swapTask2.IsCompletedSuccessfully)
+        {
+            Debug.Log($"Successfully swapped daily with {randomPortrait.Id}");
+        }
+        else
+        {
+            Debug.LogError("Failed to complete swap: " + 
+                         (swapTask1.Exception?.Message ?? swapTask2.Exception?.Message));
+        }
+    }
     void EndGame(bool isWon)
     {
         if (isWon)
@@ -95,6 +310,7 @@ public class MasterController : MonoBehaviour
         //  for ethan debugging
         if (canSeeGroundTruth) {
             mainImage.texture = answerImage;
+            return ;
         }
 
         currentUnionedMatchedPixelCount = 0;
@@ -255,7 +471,7 @@ public class MasterController : MonoBehaviour
             portraitData[name] = textures[i];
             portraitNames[i] = name;
             
-            Debug.Log($"Portrait Name: {name}, Dimensions: {textures[i].width} x {textures[i].height}");
+            // Debug.Log($"Portrait Name: {name}, Dimensions: {textures[i].width} x {textures[i].height}");
         }
     }
     
@@ -371,3 +587,4 @@ public class MasterController : MonoBehaviour
         canvas.gameObject.SetActive(true);
     }
 }
+
