@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 6be463fa8b6a70f42b03d5a75b97b665
+guid: 01d63f04ae30a1e44baa6cc38de86c15
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -482641638291319136
-    second: Mona Lisa_0
+      213: -3455103635969677500
+    second: Return_Default_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -110,19 +110,6 @@ TextureImporter:
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 4
-    buildTarget: WebGL
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
     buildTarget: iOS
     maxTextureSize: 2048
     resizeAlgorithm: 0
@@ -139,13 +126,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Mona Lisa_0
+      name: Return_Default_0
       rect:
         serializedVersion: 2
         x: 0
-        y: 0
-        width: 2835
-        height: 4289
+        y: 72
+        width: 512
+        height: 368
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -154,8 +141,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 0a655d3bcff4d49f0800000000000000
-      internalID: -482641638291319136
+      spriteID: 447eddb8c810d00d0800000000000000
+      internalID: -3455103635969677500
       vertices: []
       indices: 
       edges: []
@@ -173,8 +160,7 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable:
-      Mona Lisa_0: -482641638291319136
+    nameFileIdTable: {}
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
