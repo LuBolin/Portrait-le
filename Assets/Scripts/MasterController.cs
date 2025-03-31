@@ -95,7 +95,6 @@ public class MasterController : MonoBehaviour
         //  for ethan debugging
         if (canSeeGroundTruth) {
             mainImage.texture = answerImage;
-            return ;
         }
 
         currentUnionedMatchedPixelCount = 0;
@@ -169,7 +168,7 @@ public class MasterController : MonoBehaviour
                 currentUnionedMatchedPixelCount += 1;
                 currentMatchedPixelCount += 1;
             }
-            matchingPixels[i] = Color.blue;
+            matchingPixels[i] = guessColor;
         }
         
         // Update MainImage
