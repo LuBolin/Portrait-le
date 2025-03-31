@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.UIElements;
+using Button = UnityEngine.UI.Button;
 
 
 public class MasterController : MonoBehaviour
@@ -13,6 +15,10 @@ public class MasterController : MonoBehaviour
     private const float IMAGE_MATCH_PERCENTAGE_GOAL = 0.9f;
     private const float GOLDEN_RATIO = 1.618f;
     private const float GOLDEN_RATIO_INVERSE = 1.0f / GOLDEN_RATIO;
+    private const float HUE_TOLERNCE = 0.1f; // eyes are sensitive to hue shift
+    private const float SATURATION_TOLERANCE = 0.2f; // varies to lighting & transparency
+    private const float VALUE_TOLERANCE = 0.2f; // varies to lighting & transparency
+    
     
     // Truth related
     private Texture2D groundTruthImage;
@@ -28,8 +34,10 @@ public class MasterController : MonoBehaviour
     private int nameGuessesMade = 0;
     private Color[] transparentPixels; // helper
     private Texture2D currentUnionedMatchImage; // transparent means null
-    private float currentMatchedPixelCount = 0;
+    private float currentUnionedMatchedPixelCount = 0;
     private float imageMatchPercentage = 0.0f;
+    
+    
     
     // UI elements
     public Canvas canvas;
@@ -49,81 +57,11 @@ public class MasterController : MonoBehaviour
         SetupUI();
         
         LoadPortraitsFromResources();
+
+        (string portraitName, Texture2D portraitTexture) = GetRandomPortrait();
+        SetTruth(portraitName, portraitTexture);
     }
 
-    void SetTruth(Texture2D answerImage, string answerName)
-    {
-        groundTruthImage = answerImage;
-        groundTruthName = answerName;
-        
-        groundTruthAspectRatio = (float)groundTruthImage.width / (float)groundTruthImage.height;
-        AspectRatioFitter fitter = mainImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
-        fitter.aspectRatio = groundTruthAspectRatio;
-        
-        currentMatchedPixelCount = 0;
-        imageHistory = new Texture2D[2 * MAX_IMAGE_TRIES];
-        nameHistory = new string[MAX_TEXT_TRIES];
-        imageGuessesMade = 0;
-        nameGuessesMade = 0;
-        
-        // Transparent pixels implies un-set, similar to null
-        transparentPixels = new Color[groundTruthImage.width * groundTruthImage.height];
-        for (int i = 0; i < transparentPixels.Length; i++)
-            transparentPixels[i] = new Color(0, 0, 0, 0);
-
-        currentUnionedMatchImage = new Texture2D(groundTruthImage.width, groundTruthImage.height);
-        currentUnionedMatchImage.SetPixels(transparentPixels);
-        
-        mainImage.texture = currentUnionedMatchImage;
-    }
-    
-    Texture2D VerifyImage(Texture2D image)
-    {
-        if (groundTruthImage == null)
-            return null;
-        
-        Color[] groundTruthPixels = groundTruthImage.GetPixels();
-        Color[] guessPixels = image.GetPixels();
-        Color[] matchingPixels = new Color[groundTruthImage.width * groundTruthImage.height];
-        transparentPixels.CopyTo(matchingPixels, 0); // set all to "null"
-        Color[] currentBestGuessPixels = currentUnionedMatchImage.GetPixels();
-        
-        for (int i = 0; i < groundTruthPixels.Length; i++)
-        {
-            Color groundTruthColor = groundTruthPixels[i];
-            Color guessColor = guessPixels[i];
-
-            // Convert RGB to HSV
-            Color.RGBToHSV(groundTruthColor, out float groundTruthH, out float groundTruthS, out float groundTruthV);
-            Color.RGBToHSV(guessColor, out float guessH, out float guessS, out float guessV);
-
-            float hueTolerance = 0.1f; // 10%
-            float saturationTolerance = 0.1f; // 10%
-            float valueTolerance = 0.1f; // 10%
-            
-            float hueDiff = Mathf.Abs(groundTruthH - guessH);
-            if (hueDiff > hueTolerance) continue;
-            
-            float saturationDiff = Mathf.Abs(groundTruthS - guessS);
-            if (saturationDiff > saturationTolerance) continue;
-            
-            float valueDiff = Mathf.Abs(groundTruthV - guessV);
-            if (valueDiff > valueTolerance) continue;
-
-            Color currentGuess = currentBestGuessPixels[i];
-            if (currentGuess.a == 0) // transparent means null
-            {
-                currentBestGuessPixels[i] = guessColor;
-                currentMatchedPixelCount += 1;
-            }
-            matchingPixels[i] = guessColor;
-        }
-
-        imageMatchPercentage = currentMatchedPixelCount / groundTruthPixels.Length;
-        Texture2D matchingTexture = new Texture2D(groundTruthImage.width, groundTruthImage.height);
-        matchingTexture.SetPixels(matchingPixels);
-        return matchingTexture;
-    }
     
     void EndGame(bool isWon)
     {
@@ -137,6 +75,123 @@ public class MasterController : MonoBehaviour
             Debug.Log("Lost!");
             Debug.Log("The answer is: " + groundTruthName);
         }
+    }
+    
+    
+    // Logic
+    void SetTruth(string answerName, Texture2D answerImage)
+    {
+        groundTruthName = answerName;
+        groundTruthImage = answerImage;
+        
+        groundTruthAspectRatio = (float)groundTruthImage.width / (float)groundTruthImage.height;
+        AspectRatioFitter fitter = mainImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
+        fitter.aspectRatio = groundTruthAspectRatio;
+        
+        currentUnionedMatchedPixelCount = 0;
+        imageHistory = new Texture2D[2 * MAX_IMAGE_TRIES];
+        nameHistory = new string[MAX_TEXT_TRIES];
+        for (int i = 0; i < MAX_IMAGE_TRIES; i++)
+        {
+            RawImage imageHistoryRawImage = imageHistoryRawImages[i];
+            AspectRatioFitter historyFitter = imageHistoryRawImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
+            historyFitter.aspectRatio = groundTruthAspectRatio;
+            imageHistoryRawImage.texture = null;
+        }
+        imageGuessesMade = 0;
+        nameGuessesMade = 0;
+        
+        // Transparent pixels implies un-set, similar to null
+        transparentPixels = new Color[groundTruthImage.width * groundTruthImage.height];
+        for (int i = 0; i < transparentPixels.Length; i++)
+            transparentPixels[i] = new Color(0, 0, 0, 0);
+
+        currentUnionedMatchImage = new Texture2D(groundTruthImage.width, groundTruthImage.height);
+        currentUnionedMatchImage.SetPixels(transparentPixels);
+        currentUnionedMatchImage.Apply();
+        
+        mainImage.texture = currentUnionedMatchImage;
+    }
+    
+    Texture2D VerifyImage(Texture2D image)
+    {
+        if (groundTruthImage == null)
+            return null;
+        
+        // scale to dimensions
+        image = ScaleTexture(image, groundTruthImage);
+        Color[] groundTruthPixels = groundTruthImage.GetPixels();
+        Color[] guessPixels = image.GetPixels();
+        Color[] matchingPixels = new Color[groundTruthImage.width * groundTruthImage.height];
+        transparentPixels.CopyTo(matchingPixels, 0); // set all to "null"
+        Color[] currentBestGuessPixels = currentUnionedMatchImage.GetPixels();
+        
+        // Debug.Log("GroundTruth Pixels: " + groundTruthPixels.Length);
+        // Debug.Log("Guess Pixels: " + guessPixels.Length);
+        // Debug.Log("Matching Pixels: " + matchingPixels.Length);
+        // Debug.Log("Current Best Guess Pixels: " + currentBestGuessPixels.Length);
+        // Debug.Log("Guess Dimensions: " + image.width + " x " + image.height);
+        // Debug.Log("Ground Truth Dimensions: " + groundTruthImage.width + " x " + groundTruthImage.height);
+        
+        int currentMatchedPixelCount = 0;
+        for (int i = 0; i < groundTruthPixels.Length; i++)
+        {
+            Color groundTruthColor = groundTruthPixels[i];
+            Color guessColor = guessPixels[i];
+
+            // Convert RGB to HSV
+            Color.RGBToHSV(groundTruthColor, out float groundTruthH, out float groundTruthS, out float groundTruthV);
+            Color.RGBToHSV(guessColor, out float guessH, out float guessS, out float guessV);
+            
+            float hueDiff = Mathf.Abs(groundTruthH - guessH);
+            if (hueDiff > HUE_TOLERNCE) continue;
+            
+            float saturationDiff = Mathf.Abs(groundTruthS - guessS);
+            if (saturationDiff > SATURATION_TOLERANCE) continue;
+            
+            float valueDiff = Mathf.Abs(groundTruthV - guessV);
+            if (valueDiff > VALUE_TOLERANCE) continue;
+
+            Color currentGuess = currentBestGuessPixels[i];
+            if (currentGuess.a == 0) // transparent means null
+            {
+                currentBestGuessPixels[i] = groundTruthColor;
+                currentUnionedMatchedPixelCount += 1;
+                currentMatchedPixelCount += 1;
+            }
+            matchingPixels[i] = Color.blue;
+        }
+        
+        // Update MainImage
+        currentUnionedMatchImage.SetPixels(currentBestGuessPixels);
+        currentUnionedMatchImage.Apply();
+        
+        imageMatchPercentage = currentUnionedMatchedPixelCount / groundTruthPixels.Length;
+        Texture2D matchingTexture = new Texture2D(groundTruthImage.width, groundTruthImage.height);
+        matchingTexture.SetPixels(matchingPixels);
+        matchingTexture.Apply();
+        return matchingTexture;
+    }
+    
+    Texture2D ScaleTexture(Texture2D source, Texture2D target)
+    {
+        int width = target.width;
+        int height = target.height;
+    
+        RenderTexture rt = RenderTexture.GetTemporary(width, height);
+        Graphics.Blit(source, rt);
+    
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture.active = rt;
+    
+        Texture2D scaled = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        scaled.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+        scaled.Apply();
+    
+        RenderTexture.active = previous;
+        RenderTexture.ReleaseTemporary(rt);
+    
+        return scaled;
     }
     
     
@@ -179,6 +234,8 @@ public class MasterController : MonoBehaviour
 
     void LoadPortraitsFromResources()
     {
+        // Note: In editor, set the resource's Read/Write to true
+        // It is under the "Advanced" section
         Texture2D[] textures = Resources.LoadAll<Texture2D>(PORTRAIT_DATA_PATH);
         portraitData = new Dictionary<string, Texture2D>();
         portraitNames = new string[textures.Length];
@@ -188,6 +245,8 @@ public class MasterController : MonoBehaviour
             string name = textures[i].name;
             portraitData[name] = textures[i];
             portraitNames[i] = name;
+            
+            Debug.Log($"Portrait Name: {name}, Dimensions: {textures[i].width} x {textures[i].height}");
         }
     }
     
@@ -250,24 +309,30 @@ public class MasterController : MonoBehaviour
         // Update UI
         imageHistoryRawImages[imageGuessesMade].texture = image;
         
+        imageHistory[imageGuessesMade * 2] = image;
+        imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
+        imageGuessesMade += 1;
+        
+        // Debug.Log("Image Match Percentage: " + imageMatchPercentage);
+        // Debug.Log("Image Match Percentage Goal: " + IMAGE_MATCH_PERCENTAGE_GOAL);
         if (imageMatchPercentage >= IMAGE_MATCH_PERCENTAGE_GOAL)
         {
-            // Correct guess
+            currentUnionedMatchImage.SetPixels(groundTruthImage.GetPixels());
+            currentUnionedMatchImage.Apply();
         }
         else
         {
-            imageHistory[imageGuessesMade * 2] = image;
-            imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
-            imageGuessesMade += 1;
+            // Incorrect guess
         }
+        
         if (imageGuessesMade == MAX_IMAGE_TRIES)
         {
             // Game over
             toCameraButton.onClick.RemoveAllListeners();
             toCameraButton.interactable = false;
         }
+        
     }
-
     
     
     // Camera Capture Prefab Interactions

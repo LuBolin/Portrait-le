@@ -181,30 +181,29 @@ public class CameraCapture : MonoBehaviour
         // Busy wait for the webcam texture to initialize
         while (webcamTexture.width <= 100 && timer < timeout)
         {
+            Debug.Log("Current webcam texture dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
+            Debug.Log("Webcam is playing: " + webcamTexture.isPlaying);
+            if (!webcamTexture.isPlaying)
+                webcamTexture.Play();
             timer += Time.deltaTime;
             yield return null;
         }
 
-        if (webcamTexture.width <= 100)
+        if (webcamTexture.width <= 100 || !webcamTexture.isPlaying)
         {
             Debug.LogWarning("Webcam failed to initialize within timeout.");
             // controller.CameraGuessCallback(null);
             yield break;
         }
         
-        Debug.Log("Current camera texture: " + webcamTexture);
-        Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
-        Debug.Log("Current camera texture width: " + webcamTexture.width);
-        Debug.Log("Current camera texture height: " + webcamTexture.height);
+        // Debug.Log("Current camera texture: " + webcamTexture);
+        // Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
+        // Debug.Log("Current camera texture width: " + webcamTexture.width);
+        // Debug.Log("Current camera texture height: " + webcamTexture.height);
         
 
         float textureRatio = (float)webcamTexture.width / webcamTexture.height;
         textureRatio = 1.0f / textureRatio; // due to us rotating the texture
-        // priont texture ratio
-        
-        // debug log the 2 ratios
-        Debug.Log("Texture ratio: " + textureRatio);
-        Debug.Log("Target ratio: " + targetAspectRatio);
         
         if (textureRatio < targetAspectRatio)
         {
