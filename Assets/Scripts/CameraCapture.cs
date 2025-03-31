@@ -181,11 +181,15 @@ public class CameraCapture : MonoBehaviour
         // Busy wait for the webcam texture to initialize
         while (webcamTexture.width <= 100 && timer < timeout)
         {
+            Debug.Log("Current webcam texture dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
+            Debug.Log("Webcam is playing: " + webcamTexture.isPlaying);
+            if (!webcamTexture.isPlaying)
+                webcamTexture.Play();
             timer += Time.deltaTime;
             yield return null;
         }
 
-        if (webcamTexture.width <= 100)
+        if (webcamTexture.width <= 100 || !webcamTexture.isPlaying)
         {
             Debug.LogWarning("Webcam failed to initialize within timeout.");
             // controller.CameraGuessCallback(null);

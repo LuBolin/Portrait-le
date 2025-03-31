@@ -15,6 +15,10 @@ public class MasterController : MonoBehaviour
     private const float IMAGE_MATCH_PERCENTAGE_GOAL = 0.9f;
     private const float GOLDEN_RATIO = 1.618f;
     private const float GOLDEN_RATIO_INVERSE = 1.0f / GOLDEN_RATIO;
+    private const float HUE_TOLERNCE = 0.1f; // eyes are sensitive to hue shift
+    private const float SATURATION_TOLERANCE = 0.2f; // varies to lighting & transparency
+    private const float VALUE_TOLERANCE = 0.2f; // varies to lighting & transparency
+    
     
     // Truth related
     private Texture2D groundTruthImage;
@@ -32,6 +36,8 @@ public class MasterController : MonoBehaviour
     private Texture2D currentUnionedMatchImage; // transparent means null
     private float currentUnionedMatchedPixelCount = 0;
     private float imageMatchPercentage = 0.0f;
+    
+    
     
     // UI elements
     public Canvas canvas;
@@ -102,6 +108,7 @@ public class MasterController : MonoBehaviour
 
         currentUnionedMatchImage = new Texture2D(groundTruthImage.width, groundTruthImage.height);
         currentUnionedMatchImage.SetPixels(transparentPixels);
+        currentUnionedMatchImage.Apply();
         
         mainImage.texture = currentUnionedMatchImage;
     }
@@ -135,35 +142,34 @@ public class MasterController : MonoBehaviour
             // Convert RGB to HSV
             Color.RGBToHSV(groundTruthColor, out float groundTruthH, out float groundTruthS, out float groundTruthV);
             Color.RGBToHSV(guessColor, out float guessH, out float guessS, out float guessV);
-
-            float hueTolerance = 0.1f; // 10%
-            float saturationTolerance = 0.1f; // 10%
-            float valueTolerance = 0.1f; // 10%
             
             float hueDiff = Mathf.Abs(groundTruthH - guessH);
-            if (hueDiff > hueTolerance) continue;
+            if (hueDiff > HUE_TOLERNCE) continue;
             
             float saturationDiff = Mathf.Abs(groundTruthS - guessS);
-            if (saturationDiff > saturationTolerance) continue;
+            if (saturationDiff > SATURATION_TOLERANCE) continue;
             
             float valueDiff = Mathf.Abs(groundTruthV - guessV);
-            if (valueDiff > valueTolerance) continue;
+            if (valueDiff > VALUE_TOLERANCE) continue;
 
             Color currentGuess = currentBestGuessPixels[i];
             if (currentGuess.a == 0) // transparent means null
             {
-                currentBestGuessPixels[i] = guessColor;
+                currentBestGuessPixels[i] = groundTruthColor;
                 currentUnionedMatchedPixelCount += 1;
                 currentMatchedPixelCount += 1;
             }
-            matchingPixels[i] = guessColor;
+            matchingPixels[i] = Color.blue;
         }
         
-        Debug.Log("Matched Pixel Count: " + currentMatchedPixelCount);
+        // Update MainImage
+        currentUnionedMatchImage.SetPixels(currentBestGuessPixels);
+        currentUnionedMatchImage.Apply();
         
         imageMatchPercentage = currentUnionedMatchedPixelCount / groundTruthPixels.Length;
         Texture2D matchingTexture = new Texture2D(groundTruthImage.width, groundTruthImage.height);
         matchingTexture.SetPixels(matchingPixels);
+        matchingTexture.Apply();
         return matchingTexture;
     }
     
@@ -302,20 +308,21 @@ public class MasterController : MonoBehaviour
         
         // Update UI
         imageHistoryRawImages[imageGuessesMade].texture = image;
-        // NullReferenjece Exception within this if-else
+        
+        imageHistory[imageGuessesMade * 2] = image;
+        imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
+        imageGuessesMade += 1;
+        
+        // Debug.Log("Image Match Percentage: " + imageMatchPercentage);
+        // Debug.Log("Image Match Percentage Goal: " + IMAGE_MATCH_PERCENTAGE_GOAL);
         if (imageMatchPercentage >= IMAGE_MATCH_PERCENTAGE_GOAL)
         {
-            // Correct guess
+            currentUnionedMatchImage.SetPixels(groundTruthImage.GetPixels());
+            currentUnionedMatchImage.Apply();
         }
         else
         {
-            imageHistory[imageGuessesMade * 2] = image;
-            imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
-            imageGuessesMade += 1;
-            
-            
-            // Debug purposes
-            mainImage.texture = matchingTexture;
+            // Incorrect guess
         }
         
         if (imageGuessesMade == MAX_IMAGE_TRIES)
