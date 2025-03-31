@@ -88,8 +88,20 @@ public class MasterController : MonoBehaviour
     }
 
     public void UpdateDailyPortraitButton() {
-        StartCoroutine(UpdateDailyPortrait());
+        // for daily reset
+        // StartCoroutine(UpdateDailyPortrait());
+
+        // for debugging (automatically overrides current day's file such that there is no need to delete cache)
+        StartCoroutine(UpdateAndSet());
     }
+    IEnumerator UpdateAndSet() {
+        yield return StartCoroutine(UpdateDailyPortrait());
+        yield return new WaitForSeconds(1f);
+        yield return StartCoroutine(DownloadAndCache(DateTime.Today.ToString("yyyy-MM-dd")));
+        yield return new WaitForSeconds(1f);
+        yield return StartCoroutine(LoadTodayPortrait());
+    }
+
 
     IEnumerator LoadTodayPortrait() {
         string todayKey = DateTime.Today.ToString("yyyy-MM-dd");      
