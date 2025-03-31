@@ -16,10 +16,9 @@ public class CameraCapture : MonoBehaviour
     private RawImage rawImage;
     private AspectRatioFitter aspectFitter;
 
-    private Transform buttonsHBox;
     private Button cancelButton;
     private Button captureButton;
-    private Button rotateButton;
+    private Button flipButton;
     
     private WebCamTexture webcamTexture;
     private WebCamDevice[] cameras;
@@ -36,27 +35,26 @@ public class CameraCapture : MonoBehaviour
     
     void Awake()
     {
-        Transform myTransform = gameObject.transform;
-        Transform canvasTransform = myTransform.Find("Canvas");
+        GameObject canvasTransform = GameObject.Find("Canvas");
         canvas = canvasTransform.GetComponent<Canvas>();
         
         // CameraFootage, then Buttons_HBox
-        Transform cameraFootage = canvasTransform.Find("CameraFootage");
+        GameObject cameraFootage = GameObject.Find("CameraFootage");
         rawImage = cameraFootage.GetComponent<RawImage>();
         aspectFitter = cameraFootage.GetComponent<AspectRatioFitter>();
-        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+        // aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
 
-        buttonsHBox = canvasTransform.Find("ButtonsHBox");
-        cancelButton = buttonsHBox.Find("CancelButton").GetComponent<Button>();
-        captureButton = buttonsHBox.Find("CaptureButton").GetComponent<Button>();
-        rotateButton = buttonsHBox.Find("RotateButton").GetComponent<Button>();
+        cancelButton = GameObject.Find("CancelButton").GetComponent<Button>();
+        captureButton = GameObject.Find("CaptureButton").GetComponent<Button>();
+        flipButton = GameObject.Find("FlipButton").GetComponent<Button>();
         
         if(cancelButton != null)
             cancelButton.onClick.AddListener(ExitCamera);
         if (captureButton != null)
             captureButton.onClick.AddListener(CaptureImage);
-        if (rotateButton != null)
-            rotateButton.onClick.AddListener(SwitchCamera);
+        if (flipButton != null)
+            flipButton.onClick.AddListener(SwitchCamera);
         
                 
         // note: ratio should not go below 0.6f, otherwise UI will overlap
@@ -181,10 +179,11 @@ public class CameraCapture : MonoBehaviour
         // Busy wait for the webcam texture to initialize
         while (webcamTexture.width <= 100 && timer < timeout)
         {
-            Debug.Log("Current webcam texture dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
-            Debug.Log("Webcam is playing: " + webcamTexture.isPlaying);
-            if (!webcamTexture.isPlaying)
-                webcamTexture.Play();
+            // Debug.Log("Current webcam texture dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
+            // Debug.Log("Webcam is playing: " + webcamTexture.isPlaying);
+            // if (!webcamTexture.isPlaying)
+            //     webcamTexture.Play();
+            
             timer += Time.deltaTime;
             yield return null;
         }
@@ -223,11 +222,14 @@ public class CameraCapture : MonoBehaviour
             rawImage.uvRect = new Rect(0f, 0f, 1f, 1f);
         }
 
+        Debug.Log("Set rawImage texture to webcamTexture of dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
         rawImage.texture = webcamTexture;
         rawImage.material = rotationMaterial;
         // rotate 90 / -90 degrees depending on camera facing
         float angle = cameras[currentCameraIndex].isFrontFacing ? -90f : 90f;
         rotationMaterial.SetFloat("_Rotation", angle);
+        
+        Debug.Log("Texture playing: " + webcamTexture.isPlaying);
         
         cameraReady = true;
         Debug.Log("Camera ready");
@@ -252,6 +254,10 @@ public class CameraCapture : MonoBehaviour
 
     public void Initialize(float aspectRatio, Camera canvasCamera, MasterController controller)
     {
+        
+        // log initializing with what params
+        Debug.Log($"Initializing CameraCapture with aspect ratio: {aspectRatio}, canvas camera: {canvasCamera}, controller: {controller}");
+        
         canvas.worldCamera = canvasCamera;
         this.controller = controller;
         

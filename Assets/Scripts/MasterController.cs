@@ -81,6 +81,7 @@ public class MasterController : MonoBehaviour
     // Logic
     void SetTruth(string answerName, Texture2D answerImage)
     {
+        Debug.Log("Setting truth to: " + answerName);
         groundTruthName = answerName;
         groundTruthImage = answerImage;
         
@@ -350,6 +351,8 @@ public class MasterController : MonoBehaviour
     
     public void CameraGuessCallback(Texture2D texture)
     {
+        Debug.Log("Camera returned: " + texture.name);
+        
         if (texture != null) // May be null if the user cancels
             HandleImageInput(texture);
 
