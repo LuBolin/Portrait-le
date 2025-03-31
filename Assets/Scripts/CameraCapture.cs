@@ -1,6 +1,8 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using Gyroscope = UnityEngine.InputSystem.Gyroscope;
 
 #if UNITY_ANDROID
 using UnityEngine.Android;
@@ -16,10 +18,9 @@ public class CameraCapture : MonoBehaviour
     private RawImage rawImage;
     private AspectRatioFitter aspectFitter;
 
-    private Transform buttonsHBox;
     private Button cancelButton;
     private Button captureButton;
-    private Button rotateButton;
+    private Button flipButton;
     
     private WebCamTexture webcamTexture;
     private WebCamDevice[] cameras;
@@ -27,36 +28,35 @@ public class CameraCapture : MonoBehaviour
     private bool initialized = false;
     private const float goldenRatio = 1.618f;
     private float targetAspectRatio = 1.0f / goldenRatio;
-    private bool isGyroSupported = false;
     private bool isPortrait = true;
     private float currentAngle = 0f;
     private bool cameraReady = false;
-
+    private AttitudeSensor attitudeSensor;
+    
     private MasterController controller;
     
     void Awake()
     {
-        Transform myTransform = gameObject.transform;
-        Transform canvasTransform = myTransform.Find("Canvas");
+        GameObject canvasTransform = GameObject.Find("Canvas");
         canvas = canvasTransform.GetComponent<Canvas>();
         
         // CameraFootage, then Buttons_HBox
-        Transform cameraFootage = canvasTransform.Find("CameraFootage");
+        GameObject cameraFootage = GameObject.Find("CameraFootage");
         rawImage = cameraFootage.GetComponent<RawImage>();
         aspectFitter = cameraFootage.GetComponent<AspectRatioFitter>();
-        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+        // aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+        aspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
 
-        buttonsHBox = canvasTransform.Find("ButtonsHBox");
-        cancelButton = buttonsHBox.Find("CancelButton").GetComponent<Button>();
-        captureButton = buttonsHBox.Find("CaptureButton").GetComponent<Button>();
-        rotateButton = buttonsHBox.Find("RotateButton").GetComponent<Button>();
+        cancelButton = GameObject.Find("CancelButton").GetComponent<Button>();
+        captureButton = GameObject.Find("CaptureButton").GetComponent<Button>();
+        flipButton = GameObject.Find("FlipButton").GetComponent<Button>();
         
         if(cancelButton != null)
             cancelButton.onClick.AddListener(ExitCamera);
         if (captureButton != null)
             captureButton.onClick.AddListener(CaptureImage);
-        if (rotateButton != null)
-            rotateButton.onClick.AddListener(SwitchCamera);
+        if (flipButton != null)
+            flipButton.onClick.AddListener(SwitchCamera);
         
                 
         // note: ratio should not go below 0.6f, otherwise UI will overlap
@@ -68,23 +68,22 @@ public class CameraCapture : MonoBehaviour
         if (!initialized || !cameraReady)
             return;
 
-        // isPortrait = Screen.orientation == ScreenOrientation.Portrait;
-        // Debug.Log("Portrait: " + isPortrait);
-        // currentAngle = GetDeviceYaw();
-        // Debug.Log("Yaw: " + currentAngle);
+        isPortrait = Screen.orientation == ScreenOrientation.Portrait;
+        Debug.Log("Portrait: " + isPortrait);
+        currentAngle = GetDeviceYaw();
+        Debug.Log("Yaw: " + currentAngle);
     }
     
     
     private float GetDeviceYaw() // Yaw is accountable for device orientation
     {
-        if (!isGyroSupported)
+        if (attitudeSensor == null || !attitudeSensor.enabled)
             return 0f;
-        
-        Quaternion gyroRotation = Input.gyro.attitude;
-        Debug.Log("Gyro rotation: " + gyroRotation);
-        Vector3 gyroEuler = gyroRotation.eulerAngles;
-        
-        float yaw = gyroEuler.y;
+
+        Quaternion rotation = attitudeSensor.attitude.value;
+        Vector3 rotEuler = rotation.eulerAngles;
+        Debug.Log("Rotation: " + rotEuler);
+        float yaw = rotEuler.y;
         return yaw;
     }
 
@@ -181,10 +180,11 @@ public class CameraCapture : MonoBehaviour
         // Busy wait for the webcam texture to initialize
         while (webcamTexture.width <= 100 && timer < timeout)
         {
-            Debug.Log("Current webcam texture dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
-            Debug.Log("Webcam is playing: " + webcamTexture.isPlaying);
-            if (!webcamTexture.isPlaying)
-                webcamTexture.Play();
+            // Debug.Log("Current webcam texture dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
+            // Debug.Log("Webcam is playing: " + webcamTexture.isPlaying);
+            // if (!webcamTexture.isPlaying)
+            //     webcamTexture.Play();
+            
             timer += Time.deltaTime;
             yield return null;
         }
@@ -195,11 +195,6 @@ public class CameraCapture : MonoBehaviour
             // controller.CameraGuessCallback(null);
             yield break;
         }
-        
-        // Debug.Log("Current camera texture: " + webcamTexture);
-        // Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
-        // Debug.Log("Current camera texture width: " + webcamTexture.width);
-        // Debug.Log("Current camera texture height: " + webcamTexture.height);
         
 
         float textureRatio = (float)webcamTexture.width / webcamTexture.height;
@@ -231,20 +226,6 @@ public class CameraCapture : MonoBehaviour
         
         cameraReady = true;
         Debug.Log("Camera ready");
-        
-        // Debug.Log("Capture prefab position: " + transform.position);
-        // RectTransform rectTransform = rawImage.rectTransform;
-        // Debug.Log("rectTransform :" + rectTransform);
-        // Canvas canvas = rawImage.canvas;
-        // Debug.Log("Image canvas: " + canvas);
-        // Camera cam = canvas.worldCamera;
-        // Debug.Log("Image Camera: " + cam);
-        // Vector3[] corners = new Vector3[4];
-        // rectTransform.GetWorldCorners(corners);
-        // Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
-        // Vector2 topRight = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
-        // Debug.Log("RawImage bottom left: " + bottomLeft);
-        // Debug.Log("RawImage top right: " + topRight);
     }
 
     
@@ -252,6 +233,7 @@ public class CameraCapture : MonoBehaviour
 
     public void Initialize(float aspectRatio, Camera canvasCamera, MasterController controller)
     {
+
         canvas.worldCamera = canvasCamera;
         this.controller = controller;
         
@@ -269,13 +251,17 @@ public class CameraCapture : MonoBehaviour
             InitializeCamera();
         #endif
         
-        if (SystemInfo.supportsGyroscope)
-        {
-            Input.gyro.enabled = true;
-            isGyroSupported = true;
-        } 
+        attitudeSensor = AttitudeSensor.current;
+        if (attitudeSensor != null)
+            InputSystem.EnableDevice(attitudeSensor);
+        
+        if (attitudeSensor == null || !attitudeSensor.enabled)
+            attitudeSensor = null;
+        
+        if (attitudeSensor != null)
+            Debug.Log("Attitude sensor IS supported on this device.");
         else
-            Debug.LogWarning("Gyroscope not supported on this device.");
+            Debug.LogWarning("Attitude sensor IS NOT supported on this device.");
     }
 
     
