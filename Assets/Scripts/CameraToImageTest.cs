@@ -38,12 +38,12 @@ public class CameraToImageTest : MonoBehaviour
 
     void TryCaptureImage()
     {
-        toCameraButton.gameObject.SetActive(false);
-        
-        imageCaptureOverlay = Instantiate(imageCapturePrefab);
-        CameraCapture cameraCapture = imageCaptureOverlay.GetComponent<CameraCapture>();
-        
-        cameraCapture.Initialize(targetAspectRatio, sceneCamera, this);
+        // toCameraButton.gameObject.SetActive(false);
+        //
+        // imageCaptureOverlay = Instantiate(imageCapturePrefab);
+        // CameraCapture cameraCapture = imageCaptureOverlay.GetComponent<CameraCapture>();
+        //
+        // cameraCapture.Initialize(targetAspectRatio, sceneCamera, this);
     }
     
     public void WriteCapturedImage(Texture texture)

@@ -1,8 +1,6 @@
-using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
-using Button = UnityEngine.UI.Button;
 
 
 public class MasterController : MonoBehaviour
@@ -13,15 +11,18 @@ public class MasterController : MonoBehaviour
     private const int MAX_IMAGE_TRIES = 5;
     private const int MAX_TEXT_TRIES = 10;
     private const float IMAGE_MATCH_PERCENTAGE_GOAL = 0.9f;
+    private const float GOLDEN_RATIO = 1.618f;
+    private const float GOLDEN_RATIO_INVERSE = 1.0f / GOLDEN_RATIO;
     
     // Truth related
     private Texture2D groundTruthImage;
     private string groundTruthName;
-    private float groundTruthAspectRatio;
+    private float groundTruthAspectRatio = GOLDEN_RATIO_INVERSE;
     
     // Guess related
     // 0, 2, 4... for guess, 1, 3, 5... for the parts that matched
     private Texture2D[] imageHistory = new Texture2D[2 * MAX_IMAGE_TRIES];
+    private RawImage[] imageHistoryRawImages = new RawImage[MAX_IMAGE_TRIES];
     private string[] nameHistory = new string[MAX_TEXT_TRIES];
     private int imageGuessesMade = 0;
     private int nameGuessesMade = 0;
@@ -31,39 +32,25 @@ public class MasterController : MonoBehaviour
     private float imageMatchPercentage = 0.0f;
     
     // UI elements
-    private Canvas canvas;
-    private RawImage mainImage;
-    private Button toCameraButton;
-    private TextField nameGuessInput;
+    public Canvas canvas;
+    public RawImage mainImage;
+    public Button toCameraButton;
+    public Transform imageHistoryRawImagesParent;
+    // public TextField nameGuessInput;
     private GameObject cameraCaptureOPrefabInstance;
     
+    // Database
+    private const string PORTRAIT_DATA_PATH = "Portraits";
+    private Dictionary<string, Texture2D> portraitData;
+    private string[] portraitNames;
     
     void Start()
     {
         SetupUI();
+        
+        LoadPortraitsFromResources();
     }
 
-    void SetupUI()
-    {
-        Transform sceneRoot = transform.parent;
-        canvas = sceneRoot.Find("Canvas").GetComponent<Canvas>();
-        mainImage = sceneRoot.Find("MainImage").GetComponent<RawImage>();
-        // get reference to the inputs
-        
-        // Uncomment the binding code below if we have the UI elements set up
-        // toCameraButton.onClick.AddListener(OpenCamera);
-        // nameGuessInput.RegisterCallback<KeyDownEvent>(evt =>
-        // {
-        //     if (evt.keyCode == KeyCode.Return)
-        //     {
-        //         if (nameGuessInput.text == "")
-        //             return;
-        //         HandleTextInput(nameGuessInput.text);
-        //         nameGuessInput.value = "";
-        //     }
-        // });
-    }
-    
     void SetTruth(Texture2D answerImage, string answerName)
     {
         groundTruthImage = answerImage;
@@ -90,44 +77,11 @@ public class MasterController : MonoBehaviour
         mainImage.texture = currentUnionedMatchImage;
     }
     
-    void HandleTextInput(string guessText)
-    {
-        if (nameGuessesMade >= MAX_TEXT_TRIES)
-            return;
-        
-        if (guessText == groundTruthName)
-        {
-            
-        }
-        else
-        {
-            nameHistory[nameGuessesMade] = guessText;
-            nameGuessesMade += 1;
-        }
-    }
-    
-    void HandleImageInput(Texture2D image)
-    {
-        if (imageGuessesMade >= MAX_IMAGE_TRIES)
-            return;
-        
-        // VerifyImage updates imageMatchPercentage
-        Texture2D matchingTexture = VerifyImage(image);
-        
-        if (imageMatchPercentage >= IMAGE_MATCH_PERCENTAGE_GOAL)
-        {
-            // Correct guess
-        }
-        else
-        {
-            imageHistory[imageGuessesMade * 2] = image;
-            imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
-            imageGuessesMade += 2;
-        }
-    }
-    
     Texture2D VerifyImage(Texture2D image)
     {
+        if (groundTruthImage == null)
+            return null;
+        
         Color[] groundTruthPixels = groundTruthImage.GetPixels();
         Color[] guessPixels = image.GetPixels();
         Color[] matchingPixels = new Color[groundTruthImage.width * groundTruthImage.height];
@@ -185,19 +139,150 @@ public class MasterController : MonoBehaviour
         }
     }
     
+    
+    // Setup
+    void SetupUI()
+    {
+        // Transform sceneRoot = transform.parent;
+        // canvas = sceneRoot.Find("Canvas").GetComponent<Canvas>();
+        // mainImage = sceneRoot.Find("MainImage").GetComponent<RawImage>();
+        // get reference to the inputs
+        
+        // assert all ui alements exist
+        if (canvas == null
+            || mainImage == null
+            || toCameraButton == null
+            || imageHistoryRawImagesParent == null)
+            // || nameGuessInput == null)
+            return;
+
+        // iterate imageparent's children and assign to imageHistoryRawImages
+
+        for (int i = 0; i < imageHistoryRawImagesParent.childCount; i++)
+        {
+            imageHistoryRawImages[i] = imageHistoryRawImagesParent.GetChild(i).GetComponent<RawImage>();
+        }
+            
+        
+        toCameraButton.onClick.AddListener(OpenCamera);
+        // nameGuessInput.RegisterCallback<KeyDownEvent>(evt =>
+        // {
+        //     if (evt.keyCode == KeyCode.Return)
+        //     {
+        //         if (nameGuessInput.text == "")
+        //             return;
+        //         HandleTextInput(nameGuessInput.text);
+        //         nameGuessInput.value = "";
+        //     }
+        // });
+    }
+
+    void LoadPortraitsFromResources()
+    {
+        Texture2D[] textures = Resources.LoadAll<Texture2D>(PORTRAIT_DATA_PATH);
+        portraitData = new Dictionary<string, Texture2D>();
+        portraitNames = new string[textures.Length];
+
+        for (int i = 0; i < textures.Length; i++)
+        {
+            string name = textures[i].name;
+            portraitData[name] = textures[i];
+            portraitNames[i] = name;
+        }
+    }
+    
+    
+    // Data Retrieval
+    (string name, Texture2D texture) GetPortraitByIndex(int index)
+    {
+        if (index < 0 || index >= portraitNames.Length)
+        {
+            Debug.LogError("Index out of bounds.");
+            return default;
+        }
+
+        string name = portraitNames[index];
+        return (name, portraitData[name]);
+    }
+
+    (string name, Texture2D texture) GetPortraitByname(string name)
+    {
+        if (!portraitData.ContainsKey(name))
+        {
+            Debug.LogError($"Texture with name '{name}' not found.");
+            return default;
+        }
+
+        return (name, portraitData[name]);
+    }
+
+    (string name, Texture2D texture) GetRandomPortrait()
+    {
+        int randomIndex = Random.Range(0, portraitNames.Length);
+        return GetPortraitByIndex(randomIndex);
+    }
+    
+    // Input Handlers
+    void HandleTextInput(string guessText)
+    {
+        if (nameGuessesMade >= MAX_TEXT_TRIES)
+            return;
+        
+        if (guessText == groundTruthName)
+        {
+            
+        }
+        else
+        {
+            nameHistory[nameGuessesMade] = guessText;
+            nameGuessesMade += 1;
+        }
+    }
+    
+    void HandleImageInput(Texture2D image)
+    {
+        if (imageGuessesMade >= MAX_IMAGE_TRIES)
+            return;
+        
+        // VerifyImage updates imageMatchPercentage
+        Texture2D matchingTexture = VerifyImage(image);
+        
+        // Update UI
+        imageHistoryRawImages[imageGuessesMade].texture = image;
+        
+        if (imageMatchPercentage >= IMAGE_MATCH_PERCENTAGE_GOAL)
+        {
+            // Correct guess
+        }
+        else
+        {
+            imageHistory[imageGuessesMade * 2] = image;
+            imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
+            imageGuessesMade += 1;
+        }
+        if (imageGuessesMade == MAX_IMAGE_TRIES)
+        {
+            // Game over
+            toCameraButton.onClick.RemoveAllListeners();
+            toCameraButton.interactable = false;
+        }
+    }
+
+    
+    
+    // Camera Capture Prefab Interactions
     void OpenCamera()
     {
-        toCameraButton.gameObject.SetActive(false);
+        canvas.gameObject.SetActive(false);
         
-        cameraCaptureOPrefabInstance = Instantiate(cameraCapturePrefab);
+        // second parameter is the parent object
+        cameraCaptureOPrefabInstance = Instantiate(cameraCapturePrefab, transform.parent);
         CameraCapture cameraCapture = cameraCaptureOPrefabInstance.GetComponent<CameraCapture>();
         
         Camera sceneCamera = Camera.main;
-        // cameraCapture.Initialize(groundTruthAspectRatio, sceneCamera, this);
-        // TODO: modify CameraCapture to take in master controller class
+        cameraCapture.Initialize(groundTruthAspectRatio, sceneCamera, this);
     }
     
-    // TODO: make CameraCapture call this function, instead of the previous WriteCapturedImage
     public void CameraGuessCallback(Texture2D texture)
     {
         if (texture != null) // May be null if the user cancels
@@ -206,6 +291,6 @@ public class MasterController : MonoBehaviour
         Destroy(cameraCaptureOPrefabInstance);
         cameraCaptureOPrefabInstance = null;
         
-        toCameraButton.gameObject.SetActive(true);
+        canvas.gameObject.SetActive(true);
     }
 }

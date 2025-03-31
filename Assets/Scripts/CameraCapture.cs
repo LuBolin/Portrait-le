@@ -32,7 +32,7 @@ public class CameraCapture : MonoBehaviour
     private float currentAngle = 0f;
     private bool cameraReady = false;
 
-    private CameraToImageTest tester;
+    private MasterController controller;
     
     void Awake()
     {
@@ -68,10 +68,10 @@ public class CameraCapture : MonoBehaviour
         if (!initialized || !cameraReady)
             return;
 
-        isPortrait = Screen.orientation == ScreenOrientation.Portrait;
-        Debug.Log("Portrait: " + isPortrait);
-        currentAngle = GetDeviceYaw();
-        Debug.Log("Yaw: " + currentAngle);
+        // isPortrait = Screen.orientation == ScreenOrientation.Portrait;
+        // Debug.Log("Portrait: " + isPortrait);
+        // currentAngle = GetDeviceYaw();
+        // Debug.Log("Yaw: " + currentAngle);
     }
     
     
@@ -90,23 +90,22 @@ public class CameraCapture : MonoBehaviour
 
     void ExitCamera()
     {
-        
-        if (webcamTexture == null || !webcamTexture.isPlaying)
+        if (controller == null)
             return;
 
-        if (tester == null)
-            return;
-
-        tester.WriteCapturedImage(null);
+        controller.CameraGuessCallback(null);
     }
     
     void CaptureImage()
     {
+        if (controller == null)
+            return;
+        
         if (webcamTexture == null || !webcamTexture.isPlaying)
+        {
+            ExitCamera();
             return;
-
-        if (tester == null)
-            return;
+        };
 
         RectTransform rectTransform = rawImage.rectTransform;
         Canvas canvas = rawImage.canvas;
@@ -125,7 +124,7 @@ public class CameraCapture : MonoBehaviour
         if (width <= 0 || height <= 0)
         {
             Debug.LogWarning("RawImage is off-screen or too small to capture.");
-            return;
+            controller.CameraGuessCallback(null);
         }
 
         RenderTexture rt = new RenderTexture(Screen.width, Screen.height, 24);
@@ -144,7 +143,7 @@ public class CameraCapture : MonoBehaviour
         RenderTexture.active = null;
         Destroy(rt);
         
-        tester.WriteCapturedImage(result);
+        controller.CameraGuessCallback(result);
     }
     
     void SwitchCamera()
@@ -156,35 +155,57 @@ public class CameraCapture : MonoBehaviour
 
     void LaunchCamera(int index)
     {
+        Debug.Log("Launch camera called on index: " + index);
         cameraReady = false;
         // stop previous camera
         if (webcamTexture != null && webcamTexture.isPlaying)
             webcamTexture.Stop();
         
+        int prevIndex = currentCameraIndex;
+        
         currentCameraIndex = index % cameras.Length;
         WebCamDevice device = cameras[currentCameraIndex];
         string camName = device.name;
-        Debug.Log("Launching camera: " + camName);
         webcamTexture = new WebCamTexture(camName);
         webcamTexture.Play();
-        rawImage.texture = webcamTexture;
-        
-        rawImage.material = rotationMaterial;
-        // rotate 90 / -90 degrees depending on camera facing
-        float angle = cameras[currentCameraIndex].isFrontFacing ? -90f : 90f;
-        rotationMaterial.SetFloat("_Rotation", angle);
         
         StartCoroutine(CropCameraTextureAndReady());
       }
     
     private IEnumerator CropCameraTextureAndReady()
     {
-        // Wait for the webcam texture to initialize
-        yield return new WaitUntil(() => webcamTexture.width > 100);
+        Debug.Log("CropCameraTextureAndReady called");
+        
+        float timeout = 5f; // max time to wait, in seconds
+        float timer = 0f;
+        // Busy wait for the webcam texture to initialize
+        while (webcamTexture.width <= 100 && timer < timeout)
+        {
+            timer += Time.deltaTime;
+            yield return null;
+        }
+
+        if (webcamTexture.width <= 100)
+        {
+            Debug.LogWarning("Webcam failed to initialize within timeout.");
+            // controller.CameraGuessCallback(null);
+            yield break;
+        }
+        
+        Debug.Log("Current camera texture: " + webcamTexture);
+        Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
+        Debug.Log("Current camera texture width: " + webcamTexture.width);
+        Debug.Log("Current camera texture height: " + webcamTexture.height);
+        
 
         float textureRatio = (float)webcamTexture.width / webcamTexture.height;
         textureRatio = 1.0f / textureRatio; // due to us rotating the texture
         // priont texture ratio
+        
+        // debug log the 2 ratios
+        Debug.Log("Texture ratio: " + textureRatio);
+        Debug.Log("Target ratio: " + targetAspectRatio);
+        
         if (textureRatio < targetAspectRatio)
         {
             // crop top and bottom
@@ -202,29 +223,38 @@ public class CameraCapture : MonoBehaviour
             // no cropping needed
             rawImage.uvRect = new Rect(0f, 0f, 1f, 1f);
         }
-        
-        WebCamDevice device = cameras[currentCameraIndex];
-        string camName = device.name;
-        Debug.Log("Launching camera: " + camName);
-        webcamTexture = new WebCamTexture(camName);
-        webcamTexture.Play();
+
         rawImage.texture = webcamTexture;
-        
         rawImage.material = rotationMaterial;
         // rotate 90 / -90 degrees depending on camera facing
         float angle = cameras[currentCameraIndex].isFrontFacing ? -90f : 90f;
         rotationMaterial.SetFloat("_Rotation", angle);
         
         cameraReady = true;
+        Debug.Log("Camera ready");
+        
+        // Debug.Log("Capture prefab position: " + transform.position);
+        // RectTransform rectTransform = rawImage.rectTransform;
+        // Debug.Log("rectTransform :" + rectTransform);
+        // Canvas canvas = rawImage.canvas;
+        // Debug.Log("Image canvas: " + canvas);
+        // Camera cam = canvas.worldCamera;
+        // Debug.Log("Image Camera: " + cam);
+        // Vector3[] corners = new Vector3[4];
+        // rectTransform.GetWorldCorners(corners);
+        // Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
+        // Vector2 topRight = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
+        // Debug.Log("RawImage bottom left: " + bottomLeft);
+        // Debug.Log("RawImage top right: " + topRight);
     }
 
     
     #region Public methods
 
-    public void Initialize(float aspectRatio, Camera canvasCamera, CameraToImageTest tester)
+    public void Initialize(float aspectRatio, Camera canvasCamera, MasterController controller)
     {
         canvas.worldCamera = canvasCamera;
-        this.tester = tester;
+        this.controller = controller;
         
         // reset to false, incase initialization of camera fails
         initialized = false;
@@ -239,6 +269,7 @@ public class CameraCapture : MonoBehaviour
         #else
             InitializeCamera();
         #endif
+        
         if (SystemInfo.supportsGyroscope)
         {
             Input.gyro.enabled = true;
