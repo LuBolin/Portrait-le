@@ -351,7 +351,8 @@ public class MasterController : MonoBehaviour
     
     public void CameraGuessCallback(Texture2D texture)
     {
-        Debug.Log("Camera returned: " + texture.name);
+        bool isNull = texture == null;
+        Debug.Log("Camera returned. IsNull: " + isNull);
         
         if (texture != null) // May be null if the user cancels
             HandleImageInput(texture);

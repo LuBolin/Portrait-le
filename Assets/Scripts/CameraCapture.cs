@@ -1,6 +1,8 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using Gyroscope = UnityEngine.InputSystem.Gyroscope;
 
 #if UNITY_ANDROID
 using UnityEngine.Android;
@@ -26,11 +28,11 @@ public class CameraCapture : MonoBehaviour
     private bool initialized = false;
     private const float goldenRatio = 1.618f;
     private float targetAspectRatio = 1.0f / goldenRatio;
-    private bool isGyroSupported = false;
     private bool isPortrait = true;
     private float currentAngle = 0f;
     private bool cameraReady = false;
-
+    private AttitudeSensor attitudeSensor;
+    
     private MasterController controller;
     
     void Awake()
@@ -66,23 +68,22 @@ public class CameraCapture : MonoBehaviour
         if (!initialized || !cameraReady)
             return;
 
-        // isPortrait = Screen.orientation == ScreenOrientation.Portrait;
-        // Debug.Log("Portrait: " + isPortrait);
-        // currentAngle = GetDeviceYaw();
-        // Debug.Log("Yaw: " + currentAngle);
+        isPortrait = Screen.orientation == ScreenOrientation.Portrait;
+        Debug.Log("Portrait: " + isPortrait);
+        currentAngle = GetDeviceYaw();
+        Debug.Log("Yaw: " + currentAngle);
     }
     
     
     private float GetDeviceYaw() // Yaw is accountable for device orientation
     {
-        if (!isGyroSupported)
+        if (attitudeSensor == null || !attitudeSensor.enabled)
             return 0f;
-        
-        Quaternion gyroRotation = Input.gyro.attitude;
-        Debug.Log("Gyro rotation: " + gyroRotation);
-        Vector3 gyroEuler = gyroRotation.eulerAngles;
-        
-        float yaw = gyroEuler.y;
+
+        Quaternion rotation = attitudeSensor.attitude.value;
+        Vector3 rotEuler = rotation.eulerAngles;
+        Debug.Log("Rotation: " + rotEuler);
+        float yaw = rotEuler.y;
         return yaw;
     }
 
@@ -195,11 +196,6 @@ public class CameraCapture : MonoBehaviour
             yield break;
         }
         
-        // Debug.Log("Current camera texture: " + webcamTexture);
-        // Debug.Log("Current camera texture is playing: " + webcamTexture.isPlaying);
-        // Debug.Log("Current camera texture width: " + webcamTexture.width);
-        // Debug.Log("Current camera texture height: " + webcamTexture.height);
-        
 
         float textureRatio = (float)webcamTexture.width / webcamTexture.height;
         textureRatio = 1.0f / textureRatio; // due to us rotating the texture
@@ -222,31 +218,14 @@ public class CameraCapture : MonoBehaviour
             rawImage.uvRect = new Rect(0f, 0f, 1f, 1f);
         }
 
-        Debug.Log("Set rawImage texture to webcamTexture of dimensions: " + webcamTexture.width + "x" + webcamTexture.height);
         rawImage.texture = webcamTexture;
         rawImage.material = rotationMaterial;
         // rotate 90 / -90 degrees depending on camera facing
         float angle = cameras[currentCameraIndex].isFrontFacing ? -90f : 90f;
         rotationMaterial.SetFloat("_Rotation", angle);
         
-        Debug.Log("Texture playing: " + webcamTexture.isPlaying);
-        
         cameraReady = true;
         Debug.Log("Camera ready");
-        
-        // Debug.Log("Capture prefab position: " + transform.position);
-        // RectTransform rectTransform = rawImage.rectTransform;
-        // Debug.Log("rectTransform :" + rectTransform);
-        // Canvas canvas = rawImage.canvas;
-        // Debug.Log("Image canvas: " + canvas);
-        // Camera cam = canvas.worldCamera;
-        // Debug.Log("Image Camera: " + cam);
-        // Vector3[] corners = new Vector3[4];
-        // rectTransform.GetWorldCorners(corners);
-        // Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
-        // Vector2 topRight = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
-        // Debug.Log("RawImage bottom left: " + bottomLeft);
-        // Debug.Log("RawImage top right: " + topRight);
     }
 
     
@@ -254,10 +233,7 @@ public class CameraCapture : MonoBehaviour
 
     public void Initialize(float aspectRatio, Camera canvasCamera, MasterController controller)
     {
-        
-        // log initializing with what params
-        Debug.Log($"Initializing CameraCapture with aspect ratio: {aspectRatio}, canvas camera: {canvasCamera}, controller: {controller}");
-        
+
         canvas.worldCamera = canvasCamera;
         this.controller = controller;
         
@@ -275,13 +251,17 @@ public class CameraCapture : MonoBehaviour
             InitializeCamera();
         #endif
         
-        if (SystemInfo.supportsGyroscope)
-        {
-            Input.gyro.enabled = true;
-            isGyroSupported = true;
-        } 
+        attitudeSensor = AttitudeSensor.current;
+        if (attitudeSensor != null)
+            InputSystem.EnableDevice(attitudeSensor);
+        
+        if (attitudeSensor == null || !attitudeSensor.enabled)
+            attitudeSensor = null;
+        
+        if (attitudeSensor != null)
+            Debug.Log("Attitude sensor IS supported on this device.");
         else
-            Debug.LogWarning("Gyroscope not supported on this device.");
+            Debug.LogWarning("Attitude sensor IS NOT supported on this device.");
     }
 
     
