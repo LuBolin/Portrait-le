@@ -42,8 +42,7 @@ public class MasterController : MonoBehaviour
     
     // Guess related
     // 0, 2, 4... for guess, 1, 3, 5... for the parts that matched
-    private Texture2D[] imageHistory = new Texture2D[2 * MAX_IMAGE_TRIES];
-    private RawImage[] imageHistoryRawImages = new RawImage[MAX_IMAGE_TRIES];
+    private InputImageHistory[] imageHistory = new InputImageHistory[MAX_IMAGE_TRIES];
     private string[] nameHistory = new string[MAX_TEXT_TRIES];
     private int imageGuessesMade = 0;
     private int nameGuessesMade = 0;
@@ -312,16 +311,12 @@ public class MasterController : MonoBehaviour
             mainImage.texture = answerImage;
             return ;
         }
-
         currentUnionedMatchedPixelCount = 0;
-        imageHistory = new Texture2D[2 * MAX_IMAGE_TRIES];
         nameHistory = new string[MAX_TEXT_TRIES];
         for (int i = 0; i < MAX_IMAGE_TRIES; i++)
         {
-            RawImage imageHistoryRawImage = imageHistoryRawImages[i];
-            AspectRatioFitter historyFitter = imageHistoryRawImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
-            historyFitter.aspectRatio = groundTruthAspectRatio;
-            imageHistoryRawImage.texture = null;
+            imageHistory[i].ClearGuess();
+            imageHistory[i].SetAspectRatio(groundTruthAspectRatio);
         }
         imageGuessesMade = 0;
         nameGuessesMade = 0;
@@ -436,11 +431,10 @@ public class MasterController : MonoBehaviour
             // || nameGuessInput == null)
             return;
 
-        // iterate imageparent's children and assign to imageHistoryRawImages
-
         for (int i = 0; i < imageHistoryRawImagesParent.childCount; i++)
         {
-            imageHistoryRawImages[i] = imageHistoryRawImagesParent.GetChild(i).GetComponent<RawImage>();
+            GameObject child = imageHistoryRawImagesParent.GetChild(i).gameObject;
+            imageHistory[i] = imageHistoryRawImagesParent.GetChild(i).GetComponent<InputImageHistory>();
         }
             
         
@@ -532,10 +526,7 @@ public class MasterController : MonoBehaviour
         Texture2D matchingTexture = VerifyImage(image);
         
         // Update UI
-        imageHistoryRawImages[imageGuessesMade].texture = image;
-        
-        imageHistory[imageGuessesMade * 2] = image;
-        imageHistory[imageGuessesMade * 2 + 1] = matchingTexture;
+        imageHistory[imageGuessesMade].SetGuess(image, matchingTexture);
         imageGuessesMade += 1;
         
         // Debug.Log("Image Match Percentage: " + imageMatchPercentage);

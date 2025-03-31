@@ -843,6 +843,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 809411294}
     m_Modifications:
+    - target: {fileID: 2210486666146991998, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
+      propertyPath: m_TargetGraphic
+      value: 
+      objectReference: {fileID: 2003123838}
     - target: {fileID: 4878097256059214361, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
       propertyPath: m_Name
       value: InputImage4
@@ -961,6 +965,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 809411294}
     m_Modifications:
+    - target: {fileID: 2210486666146991998, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
+      propertyPath: m_TargetGraphic
+      value: 
+      objectReference: {fileID: 788854313}
     - target: {fileID: 4878097256059214361, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
       propertyPath: m_Name
       value: InputImage2
@@ -1155,6 +1163,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 809411294}
     m_Modifications:
+    - target: {fileID: 2210486666146991998, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
+      propertyPath: m_TargetGraphic
+      value: 
+      objectReference: {fileID: 983559313}
     - target: {fileID: 4878097256059214361, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
       propertyPath: m_Name
       value: InputImage0
@@ -2355,6 +2367,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 809411294}
     m_Modifications:
+    - target: {fileID: 2210486666146991998, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
+      propertyPath: m_TargetGraphic
+      value: 
+      objectReference: {fileID: 2087523273}
     - target: {fileID: 4878097256059214361, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
       propertyPath: m_Name
       value: InputImage3
@@ -2500,6 +2516,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 809411294}
     m_Modifications:
+    - target: {fileID: 2210486666146991998, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
+      propertyPath: m_TargetGraphic
+      value: 
+      objectReference: {fileID: 2100025296}
     - target: {fileID: 4878097256059214361, guid: 6f6cb8830ccd0f141843d04cc3753e4d, type: 3}
       propertyPath: m_Name
       value: InputImage1
