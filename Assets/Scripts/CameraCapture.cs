@@ -1,8 +1,10 @@
+using System;
 using System.Collections;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
-using Gyroscope = UnityEngine.InputSystem.Gyroscope;
+using Debug = UnityEngine.Debug;
 
 #if UNITY_ANDROID
 using UnityEngine.Android;
@@ -13,6 +15,9 @@ public class CameraCapture : MonoBehaviour
 {
     // rotationMaterial has RotateUVShader
     public Material rotationMaterial;
+    public Texture2D shutterFramesResource;
+    
+    private const float GRAVITY_SCORE_TOLERANCE = 0.1f;
     
     private Canvas canvas;
     private RawImage rawImage;
@@ -21,6 +26,14 @@ public class CameraCapture : MonoBehaviour
     private Button cancelButton;
     private Button captureButton;
     private Button flipButton;
+
+    private Texture2D[] shutterFrames;
+    private RawImage shutterOverlay;
+    private float frameRate = 60f;
+    private bool isShutterAnimating = false;
+    private float shutterTimer = 0f;
+    private int currentFrame = 0;
+    private bool targetShutterState;
     
     private WebCamTexture webcamTexture;
     private WebCamDevice[] cameras;
@@ -28,10 +41,9 @@ public class CameraCapture : MonoBehaviour
     private bool initialized = false;
     private const float goldenRatio = 1.618f;
     private float targetAspectRatio = 1.0f / goldenRatio;
-    private bool isPortrait = true;
-    private float currentAngle = 0f;
     private bool cameraReady = false;
     private AttitudeSensor attitudeSensor;
+    private GravitySensor gravitySensor;
     
     private MasterController controller;
     
@@ -47,6 +59,9 @@ public class CameraCapture : MonoBehaviour
         // aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
         aspectFitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
 
+        shutterOverlay = GameObject.Find("ShutterOverlay").GetComponent<RawImage>();
+        shutterOverlay.gameObject.SetActive(false);
+        
         cancelButton = GameObject.Find("CancelButton").GetComponent<Button>();
         captureButton = GameObject.Find("CaptureButton").GetComponent<Button>();
         flipButton = GameObject.Find("FlipButton").GetComponent<Button>();
@@ -57,36 +72,104 @@ public class CameraCapture : MonoBehaviour
             captureButton.onClick.AddListener(CaptureImage);
         if (flipButton != null)
             flipButton.onClick.AddListener(SwitchCamera);
-        
-                
+
+        LoadShutterFrames();
+
         // note: ratio should not go below 0.6f, otherwise UI will overlap
         // Initialize(1.0f / goldenRatio,);
     }
 
     void Update()
     {
-        if (!initialized || !cameraReady)
+        if (!initialized)
             return;
-
-        isPortrait = Screen.orientation == ScreenOrientation.Portrait;
-        Debug.Log("Portrait: " + isPortrait);
-        currentAngle = GetDeviceYaw();
-        Debug.Log("Yaw: " + currentAngle);
+        
+        ProcessShutter(GetPortraitnessScore());
     }
     
-    
-    private float GetDeviceYaw() // Yaw is accountable for device orientation
+    float GetPortraitnessScore() 
     {
-        if (attitudeSensor == null || !attitudeSensor.enabled)
-            return 0f;
-
-        Quaternion rotation = attitudeSensor.attitude.value;
-        Vector3 rotEuler = rotation.eulerAngles;
-        Debug.Log("Rotation: " + rotEuler);
-        float yaw = rotEuler.y;
-        return yaw;
+        Vector3 gravity = gravitySensor.gravity.value.normalized;
+    
+        // How much gravity aligns with portrait axis (Y)
+        float portraitAlignment = Mathf.Abs(gravity.y);
+        // How much gravity aligns with landscape axis (X)
+        float landscapeAlignment = Mathf.Abs(gravity.x);
+    
+        // Score (1 = pure portrait, 0 = pure landscape)
+        return Mathf.Clamp01(portraitAlignment - landscapeAlignment + 0.5f);
     }
 
+    void LoadShutterFrames()
+    {
+        // shutter_frames_24 -> 24 frames
+        string filename = shutterFramesResource.name;
+        int framesCount = int.Parse(filename.Split('_').Last());
+        shutterFrames = new Texture2D[framesCount];
+        int width = shutterFramesResource.width / framesCount;
+        int height = shutterFramesResource.height;
+        for (int i = 0; i < framesCount; i++)
+        {
+            Texture2D frame = new Texture2D(width, height);
+            Color[] pixels = shutterFramesResource.GetPixels(i * width, 0, width, height);
+            frame.SetPixels(pixels);
+            frame.Apply();
+            shutterFrames[i] = frame;
+        }
+    }
+    
+    void ProcessShutter(float portraitness)
+    {
+        // if 1 - protraitness is more than tolerance, meaning we are not portrait enough,
+        // have a shutter closing to cover the rawImage's area
+        // else, open the shutter
+        
+        IEnumerator AnimateShutter(bool shouldOpen)
+        {
+            isShutterAnimating = true;
+            shutterOverlay.gameObject.SetActive(true);
+
+            bool shouldClose = !shouldOpen;
+            
+            if (shouldClose)
+            {
+                cancelButton.interactable = false;
+                captureButton.interactable = false;
+                flipButton.interactable = false;
+            }
+    
+            int startFrame = shouldClose ? 0 : shutterFrames.Length - 1;
+            int endFrame = shouldClose ? shutterFrames.Length - 1 : 0;
+            int step = shouldClose ? 1 : -1;
+    
+            float period = 1f / frameRate;
+            for (int i = startFrame; i != endFrame + step; i += step)
+            {
+                shutterOverlay.texture = shutterFrames[i];
+                yield return new WaitForSeconds(period);
+            }
+
+            if (!shouldClose)
+            {
+                cancelButton.interactable = true;
+                captureButton.interactable = true;
+                flipButton.interactable = true;
+            }
+            
+            isShutterAnimating = false;
+            shutterOverlay.gameObject.SetActive(!targetShutterState);
+        }
+        
+        bool shouldBeOpen = (1 - portraitness) <= GRAVITY_SCORE_TOLERANCE;
+        Debug.Log("Portraitness score: " + portraitness + ", Should be open: " + shouldBeOpen);
+    
+        if (shouldBeOpen != targetShutterState && !isShutterAnimating)
+        {
+            targetShutterState = shouldBeOpen;
+            StartCoroutine(AnimateShutter(shouldBeOpen));
+        }
+    }
+    
     void ExitCamera()
     {
         if (controller == null)
@@ -111,7 +194,23 @@ public class CameraCapture : MonoBehaviour
         Camera cam = canvas.worldCamera;
         
         Vector3[] corners = new Vector3[4];
-        rectTransform.GetWorldCorners(corners);
+        // rectTransform.GetWorldCorners(corners);
+        
+        rectTransform.GetLocalCorners(corners);
+    
+        // Convert to world space without flip
+        bool wasFlipped = Mathf.Abs(rawImage.rectTransform.localEulerAngles.y) > 90f;
+        if (wasFlipped)
+        {
+            rawImage.rectTransform.localEulerAngles = Vector3.zero;
+            rectTransform.GetWorldCorners(corners);
+            rawImage.rectTransform.localEulerAngles = new Vector3(0, 180f, 0);
+        }
+        else
+        {
+            rectTransform.GetWorldCorners(corners);
+        }
+        
 
         // Convert world corners to screen space
         Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
@@ -200,24 +299,37 @@ public class CameraCapture : MonoBehaviour
         float textureRatio = (float)webcamTexture.width / webcamTexture.height;
         textureRatio = 1.0f / textureRatio; // due to us rotating the texture
         
+        Rect uvRect;
         if (textureRatio < targetAspectRatio)
         {
             // crop top and bottom
             float H = textureRatio / targetAspectRatio;
-            rawImage.uvRect = new Rect(0f, (1f - H) / 2f, 1f, H);
+            uvRect = new Rect(0f, (1f - H) / 2f, 1f, H);
         }
         else if (textureRatio > targetAspectRatio)
         {
             // crop left and right
             float W = targetAspectRatio / textureRatio;
-            rawImage.uvRect = new Rect((1f - W) / 2f, 0f, W, 1f);
+            uvRect = new Rect((1f - W) / 2f, 0f, W, 1f);
         }
         else
         {
             // no cropping needed
-            rawImage.uvRect = new Rect(0f, 0f, 1f, 1f);
+            uvRect = new Rect(0f, 0f, 1f, 1f);
         }
 
+        
+        // account for flipping
+        Vector3 eulerAngles = rawImage.rectTransform.localEulerAngles;
+        if (cameras[currentCameraIndex].isFrontFacing)
+            eulerAngles.y = 180f;
+        else
+            eulerAngles.y = 0f;
+        rawImage.rectTransform.localEulerAngles = eulerAngles;
+        
+        
+        rawImage.uvRect = uvRect;
+        
         rawImage.texture = webcamTexture;
         rawImage.material = rotationMaterial;
         // rotate 90 / -90 degrees depending on camera facing
@@ -254,14 +366,22 @@ public class CameraCapture : MonoBehaviour
         attitudeSensor = AttitudeSensor.current;
         if (attitudeSensor != null)
             InputSystem.EnableDevice(attitudeSensor);
-        
         if (attitudeSensor == null || !attitudeSensor.enabled)
             attitudeSensor = null;
-        
         if (attitudeSensor != null)
             Debug.Log("Attitude sensor IS supported on this device.");
         else
             Debug.LogWarning("Attitude sensor IS NOT supported on this device.");
+        
+        gravitySensor = GravitySensor.current;
+        if (gravitySensor != null)
+            InputSystem.EnableDevice(gravitySensor);
+        if (gravitySensor == null || !gravitySensor.enabled)
+            gravitySensor = null;
+        if (gravitySensor != null)
+            Debug.Log("Gravity sensor IS supported on this device.");
+        else
+            Debug.LogWarning("Gravity sensor IS NOT supported on this device.");
     }
 
     
