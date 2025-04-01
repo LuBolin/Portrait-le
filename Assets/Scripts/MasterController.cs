@@ -11,6 +11,7 @@ using UnityEngine.Networking;
 using Firebase.Extensions;
 using System.IO;
 using System.Linq;
+using TMPro;
 
 
 public class MasterController : MonoBehaviour
@@ -32,8 +33,6 @@ public class MasterController : MonoBehaviour
     private const string FB_COLLECTION = "portraits" ;
     private const string FB_DOCUMENT_NAME = "name" ;
     private const string FB_DOCUMENT_STORAGE = "mediaURL" ;
-    //  For Debug
-    [SerializeField] public bool canSeeGroundTruth;
     
     // Truth related
     private Texture2D groundTruthImage;
@@ -54,11 +53,12 @@ public class MasterController : MonoBehaviour
     
     
     // UI elements
-    public Canvas canvas;
-    public RawImage mainImage;
-    public Button toCameraButton;
-    public Transform imageHistoryRawImagesParent;
-    // public TextField nameGuessInput;
+    private Canvas canvas;
+    private RawImage mainImage;
+    private Button toCameraButton;
+    private Transform imageHistoryParent;
+    private TMP_InputField guessNameInput;
+    private Button guessNameButton;
     private GameObject cameraCaptureOPrefabInstance;
     
     // Database
@@ -77,10 +77,72 @@ public class MasterController : MonoBehaviour
         
         // LoadPortraitsFromResources();
 
-        (string portraitName, Texture2D portraitTexture) = GetRandomPortrait();
-        SetTruth(portraitName, portraitTexture);
+        // (string portraitName, Texture2D portraitTexture) = GetRandomPortrait();
+        // SetTruth(portraitName, portraitTexture);
     }
 
+    void EndGame(bool isWon)
+    {
+        if (isWon)
+        {
+            Debug.Log("Won!");
+            Debug.Log("The answer is: " + groundTruthName);
+        }
+        else
+        {
+            Debug.Log("Lost!");
+            Debug.Log("The answer is: " + groundTruthName);
+        }
+    }
+
+    
+    #region Setup
+ 
+    void SetupUI()
+    {
+        canvas = GameObject.Find("Canvas").GetComponent<Canvas>();
+        mainImage = GameObject.Find("MainImage").GetComponent<RawImage>();
+        toCameraButton = GameObject.Find("ToCameraButton").GetComponent<Button>();
+        imageHistoryParent = GameObject.Find("ImageHistoryParent").transform;
+        guessNameInput = GameObject.Find("NameGuessInput").GetComponent<TMP_InputField>();
+        guessNameButton = GameObject.Find("NameGuessButton").GetComponent<Button>();
+        
+        // IsNullCheck(canvas);
+        // IsNullCheck(mainImage);
+        // IsNullCheck(toCameraButton);
+        // IsNullCheck(imageHistoryParent);
+        // IsNullCheck(guessNameInput);
+        
+        if (canvas == null
+            || mainImage == null
+            || toCameraButton == null
+            || imageHistoryParent == null
+            || guessNameInput == null)
+            return;
+
+        for (int i = 0; i < imageHistoryParent.childCount; i++)
+        {
+            imageHistory[i] = imageHistoryParent.GetChild(i).GetComponent<InputImageHistory>();
+        }
+            
+        
+        toCameraButton.onClick.AddListener(OpenCamera);
+        guessNameInput.onEndEdit.AddListener(MonitorNameGuessInputEmptuness);
+        guessNameButton.interactable = false;
+        guessNameButton.onClick.AddListener(() =>
+        {
+            string guessText = guessNameInput.text;
+            guessNameInput.text = string.Empty;
+            HandleTextInput(guessText);
+        });
+    }
+
+    
+    #endregion
+    
+    
+    #region Firebase
+    
     void SetupFirebase() {
         fbFirestore = FirebaseFirestore.DefaultInstance;
 
@@ -94,6 +156,7 @@ public class MasterController : MonoBehaviour
         // for debugging (automatically overrides current day's file such that there is no need to delete cache)
         StartCoroutine(UpdateAndSet());
     }
+    
     IEnumerator UpdateAndSet() {
         yield return StartCoroutine(UpdateDailyPortrait());
         yield return new WaitForSeconds(1f);
@@ -101,8 +164,7 @@ public class MasterController : MonoBehaviour
         yield return new WaitForSeconds(1f);
         yield return StartCoroutine(LoadTodayPortrait());
     }
-
-
+    
     IEnumerator LoadTodayPortrait() {
         string todayKey = DateTime.Today.ToString("yyyy-MM-dd");      
         // 1. Check cache first
@@ -127,8 +189,6 @@ public class MasterController : MonoBehaviour
             Debug.LogError("Failed to download and cache today's portrait");
         }
     }
-
-
 
     private (Texture2D, string) TryGetCachedImage(string dateKey)
     {
@@ -156,8 +216,7 @@ public class MasterController : MonoBehaviour
         }
         return (null, null);
     }
-
-
+    
     IEnumerator DownloadAndCache(string dateKey) {
         // get the document named "today" from "/portraits"
         DocumentReference portraitsRef = fbFirestore.Collection(FB_COLLECTION).Document(FB_TODAY_DOCUMENT);
@@ -235,9 +294,9 @@ public class MasterController : MonoBehaviour
 
             Debug.Log("download complete");
         }
-    } 
-
-  public IEnumerator UpdateDailyPortrait() {
+    }
+    
+    public IEnumerator UpdateDailyPortrait() {
         // 1. Get all portrait documents
         Task<QuerySnapshot> getAllTask = fbFirestore.Collection(FB_COLLECTION).GetSnapshotAsync();
         yield return new WaitUntil(() => getAllTask.IsCompleted);
@@ -292,37 +351,20 @@ public class MasterController : MonoBehaviour
                          (swapTask1.Exception?.Message ?? swapTask2.Exception?.Message));
         }
     }
-    void EndGame(bool isWon)
-    {
-        if (isWon)
-        {
-            Debug.Log("Won!");
-            Debug.Log("The answer is: " + groundTruthName);
-        }
-        else
-        {
-            Debug.Log("Lost!");
-            Debug.Log("The answer is: " + groundTruthName);
-        }
-    }
+
+    #endregion
     
-    
-    // Logic
+    #region Logic
     void SetTruth(string answerName, Texture2D answerImage)
     {
         Debug.Log("Setting truth to: " + answerName);
         groundTruthName = answerName;
         groundTruthImage = answerImage;
-        
+
         groundTruthAspectRatio = (float)groundTruthImage.width / (float)groundTruthImage.height;
         AspectRatioFitter fitter = mainImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
         fitter.aspectRatio = groundTruthAspectRatio;
         
-        //  for ethan debugging
-        if (canSeeGroundTruth) {
-            mainImage.texture = answerImage;
-            return ;
-        }
         currentUnionedMatchedPixelCount = 0;
         nameHistory = new string[MAX_TEXT_TRIES];
         for (int i = 0; i < MAX_IMAGE_TRIES; i++)
@@ -349,6 +391,7 @@ public class MasterController : MonoBehaviour
     {
         if (groundTruthImage == null)
             return null;
+        
         
         // scale to dimensions
         image = ScaleTexture(image, groundTruthImage);
@@ -394,6 +437,8 @@ public class MasterController : MonoBehaviour
             matchingPixels[i] = guessColor;
         }
         
+        Debug.Log("Loop completed");
+        
         // Update MainImage
         currentUnionedMatchImage.SetPixels(currentBestGuessPixels);
         currentUnionedMatchImage.Apply();
@@ -405,64 +450,12 @@ public class MasterController : MonoBehaviour
         return matchingTexture;
     }
     
-    Texture2D ScaleTexture(Texture2D source, Texture2D target)
-    {
-        int width = target.width;
-        int height = target.height;
-    
-        RenderTexture rt = RenderTexture.GetTemporary(width, height);
-        Graphics.Blit(source, rt);
-    
-        RenderTexture previous = RenderTexture.active;
-        RenderTexture.active = rt;
-    
-        Texture2D scaled = new Texture2D(width, height, TextureFormat.RGBA32, false);
-        scaled.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-        scaled.Apply();
-    
-        RenderTexture.active = previous;
-        RenderTexture.ReleaseTemporary(rt);
-    
-        return scaled;
-    }
-    
-    
-    // Setup
-    void SetupUI()
-    {
-        // Transform sceneRoot = transform.parent;
-        // canvas = sceneRoot.Find("Canvas").GetComponent<Canvas>();
-        // mainImage = sceneRoot.Find("MainImage").GetComponent<RawImage>();
-        // get reference to the inputs
-        
-        // assert all ui alements exist
-        if (canvas == null
-            || mainImage == null
-            || toCameraButton == null
-            || imageHistoryRawImagesParent == null)
-            // || nameGuessInput == null)
-            return;
+    #endregion
+ 
 
-        for (int i = 0; i < imageHistoryRawImagesParent.childCount; i++)
-        {
-            GameObject child = imageHistoryRawImagesParent.GetChild(i).gameObject;
-            imageHistory[i] = imageHistoryRawImagesParent.GetChild(i).GetComponent<InputImageHistory>();
-        }
-            
-        
-        toCameraButton.onClick.AddListener(OpenCamera);
-        // nameGuessInput.RegisterCallback<KeyDownEvent>(evt =>
-        // {
-        //     if (evt.keyCode == KeyCode.Return)
-        //     {
-        //         if (nameGuessInput.text == "")
-        //             return;
-        //         HandleTextInput(nameGuessInput.text);
-        //         nameGuessInput.value = "";
-        //     }
-        // });
-    }
-
+    
+    #region Local Data Retrieval
+    
     void LoadPortraitsFromResources()
     {
         // Note: In editor, set the resource's Read/Write to true
@@ -481,8 +474,6 @@ public class MasterController : MonoBehaviour
         }
     }
     
-    
-    // Data Retrieval
     (string name, Texture2D texture) GetPortraitByIndex(int index)
     {
         if (index < 0 || index >= portraitNames.Length)
@@ -512,12 +503,14 @@ public class MasterController : MonoBehaviour
         return GetPortraitByIndex(randomIndex);
     }
     
-    // Input Handlers
+    #endregion
+    
+    #region Input Handlers
     void HandleTextInput(string guessText)
     {
         if (nameGuessesMade >= MAX_TEXT_TRIES)
             return;
-        
+        Debug.Log("Guess: " + guessText);
         if (guessText == groundTruthName)
         {
             
@@ -562,8 +555,18 @@ public class MasterController : MonoBehaviour
         
     }
     
+    void MonitorNameGuessInputEmptuness(string guessText)
+    {
+        if (guessText == string.Empty)
+            guessNameButton.interactable = false;
+        else
+            guessNameButton.interactable = true;
+    }
     
-    // Camera Capture Prefab Interactions
+    #endregion
+    
+    #region Camera Capture Prefab Interactions
+    
     void OpenCamera()
     {
         canvas.gameObject.SetActive(false);
@@ -589,5 +592,46 @@ public class MasterController : MonoBehaviour
         
         canvas.gameObject.SetActive(true);
     }
+    
+    #endregion
+    
+    #region Helpers
+    
+    Texture2D ScaleTexture(Texture2D source, Texture2D target)
+    {
+        int width = target.width;
+        int height = target.height;
+    
+        RenderTexture rt = RenderTexture.GetTemporary(width, height);
+        Graphics.Blit(source, rt);
+    
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture.active = rt;
+    
+        Texture2D scaled = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        scaled.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+        scaled.Apply();
+    
+        RenderTexture.active = previous;
+        RenderTexture.ReleaseTemporary(rt);
+    
+        return scaled;
+    }
+
+    
+    void IsNullCheck(object obj)
+    {
+        if (obj == null)
+            Debug.Log("Null");
+        else
+            Debug.Log(obj.ToString() + " is not null");
+    }
+    
+    public RawImage GetMainImage()
+    {
+        return mainImage;
+    }
+    
+    #endregion
 }
 

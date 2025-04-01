@@ -18,7 +18,7 @@ public class InputImageHistory : MonoBehaviour, IPointerDownHandler, IPointerUpH
     void Awake()
     {
         MasterController controller = FindFirstObjectByType<MasterController>();
-        mainImage = controller.mainImage;
+        mainImage = controller.GetMainImage();
         myImage = GetComponent<RawImage>();
         myAspectRatioFitter = GetComponent<AspectRatioFitter>();
     }
