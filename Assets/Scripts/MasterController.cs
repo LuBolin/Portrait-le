@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
 using Firebase.Firestore;
 using Button = UnityEngine.UI.Button;
 using System.Threading.Tasks;
@@ -20,12 +19,12 @@ public class MasterController : MonoBehaviour
     
     // Constants
     private const int MAX_IMAGE_TRIES = 5;
-    private const int MAX_TEXT_TRIES = 10;
+    private const int MAX_TEXT_TRIES = 5;
     private const float IMAGE_MATCH_PERCENTAGE_GOAL = 0.9f;
     private const float GOLDEN_RATIO = 1.618f;
     private const float GOLDEN_RATIO_INVERSE = 1.0f / GOLDEN_RATIO;
-    private const float HUE_TOLERNCE = 0.1f; // eyes are sensitive to hue shift
-    private const float SATURATION_TOLERANCE = 0.2f; // varies to lighting & transparency
+    private const float HUE_TOLERNCE = 0.15f; // eyes are sensitive to hue shift
+    private const float SATURATION_TOLERANCE = 0.3f; // varies to lighting & transparency
     private const float VALUE_TOLERANCE = 0.2f; // varies to lighting & transparency
     
     private const string CACHE_FOLDER = "DailyImageCache";
@@ -51,10 +50,10 @@ public class MasterController : MonoBehaviour
     private float imageMatchPercentage = 0.0f;
     
     
-    
     // UI elements
     private Canvas canvas;
     private RawImage mainImage;
+    private GameObject backgroundQuestionMark;
     private Button toCameraButton;
     private Transform imageHistoryParent;
     private TMP_InputField guessNameInput;
@@ -69,32 +68,42 @@ public class MasterController : MonoBehaviour
     // Firebase
     private FirebaseFirestore fbFirestore;
     
-    void Start()
+    void Awake()
     {   
         SetupUI();
 
         SetupFirebase();
         
-        // LoadPortraitsFromResources();
-
-        // (string portraitName, Texture2D portraitTexture) = GetRandomPortrait();
-        // SetTruth(portraitName, portraitTexture);
     }
-
+    
     void EndGame(bool isWon)
     {
+        string bannerMessage = "";
+        Color bannerColor = Color.red;
+        float bannerDuration = 5f;
+        
+        // disable guessing
+        toCameraButton.interactable = false;
+        guessNameButton.interactable = false;
+        guessNameInput.interactable = false;
+        
         if (isWon)
         {
-            Debug.Log("Won!");
-            Debug.Log("The answer is: " + groundTruthName);
+            bannerMessage = "You won!\nThe answer is: " + groundTruthName;
+            bannerColor = Color.green;
         }
         else
         {
-            Debug.Log("Lost!");
-            Debug.Log("The answer is: " + groundTruthName);
+            bannerMessage = "You lost!\nThe answer is: " + groundTruthName;
+            bannerColor = Color.red;
         }
+        
+        OverlayBanner.Instance.ShowBanner(bannerMessage, bannerColor, bannerDuration);
+        MainMenu mainMenu = FindObjectOfType<MainMenu>();
+        mainMenu.gameObject.SetActive(true);
+        gameObject.SetActive(false);
     }
-
+    
     
     #region Setup
  
@@ -102,19 +111,23 @@ public class MasterController : MonoBehaviour
     {
         canvas = GameObject.Find("Canvas").GetComponent<Canvas>();
         mainImage = GameObject.Find("MainImage").GetComponent<RawImage>();
+        backgroundQuestionMark = mainImage.transform.Find("QuestionMark").gameObject;
         toCameraButton = GameObject.Find("ToCameraButton").GetComponent<Button>();
         imageHistoryParent = GameObject.Find("ImageHistoryParent").transform;
-        guessNameInput = GameObject.Find("NameGuessInput").GetComponent<TMP_InputField>();
-        guessNameButton = GameObject.Find("NameGuessButton").GetComponent<Button>();
+        guessNameInput = GameObject.Find("GuessNameInput").GetComponent<TMP_InputField>();
+        guessNameButton = GameObject.Find("GuessNameButton").GetComponent<Button>();
         
-        // IsNullCheck(canvas);
-        // IsNullCheck(mainImage);
-        // IsNullCheck(toCameraButton);
-        // IsNullCheck(imageHistoryParent);
-        // IsNullCheck(guessNameInput);
+        IsNullCheck(canvas);
+        IsNullCheck(mainImage);
+        IsNullCheck(backgroundQuestionMark);
+        IsNullCheck(toCameraButton);
+        IsNullCheck(imageHistoryParent);
+        IsNullCheck(guessNameInput);
+        IsNullCheck(guessNameButton);
         
         if (canvas == null
             || mainImage == null
+            || backgroundQuestionMark == null
             || toCameraButton == null
             || imageHistoryParent == null
             || guessNameInput == null)
@@ -124,7 +137,10 @@ public class MasterController : MonoBehaviour
         {
             imageHistory[i] = imageHistoryParent.GetChild(i).GetComponent<InputImageHistory>();
         }
-            
+        
+        // make backgroundQuestionMark render behind mainImage
+        // even though it is a child of mainImage
+        backgroundQuestionMark.transform.SetAsFirstSibling();
         
         toCameraButton.onClick.AddListener(OpenCamera);
         guessNameInput.onEndEdit.AddListener(MonitorNameGuessInputEmptuness);
@@ -146,27 +162,43 @@ public class MasterController : MonoBehaviour
     void SetupFirebase() {
         fbFirestore = FirebaseFirestore.DefaultInstance;
 
-        StartCoroutine(LoadTodayPortrait());
-    }
-
-    public void UpdateDailyPortraitButton() {
-        // for daily reset
-        // StartCoroutine(UpdateDailyPortrait());
-
-        // for debugging (automatically overrides current day's file such that there is no need to delete cache)
         StartCoroutine(UpdateAndSet());
     }
+
+    public void OnRefreshDailyPortrait() {
+        StartCoroutine(UpdateAndSet(true));
+    }
     
-    IEnumerator UpdateAndSet() {
-        yield return StartCoroutine(UpdateDailyPortrait());
-        yield return new WaitForSeconds(1f);
+    public void OnShuffleRemoteDailyPortrait()
+    {
+        StartCoroutine(ShuffleRemoteDailyPortrait());
+        OnRefreshDailyPortrait();
+    }
+    
+    IEnumerator UpdateAndSet(bool forceUpdate = false) {
+        // yield return StartCoroutine(UpdateDailyPortrait());
+        // yield return new WaitForSeconds(1f);
+        if (forceUpdate) // clear cache
+        {
+            string cacheDir = Path.Combine(Application.persistentDataPath, CACHE_FOLDER);
+            if (Directory.Exists(cacheDir))
+            {
+                Directory.Delete(cacheDir, true);
+                Debug.Log("Cache cleared");
+            }
+            else
+            {
+                Debug.Log("No cache to clear");
+            }
+        }
         yield return StartCoroutine(DownloadAndCache(DateTime.Today.ToString("yyyy-MM-dd")));
         yield return new WaitForSeconds(1f);
         yield return StartCoroutine(LoadTodayPortrait());
     }
     
     IEnumerator LoadTodayPortrait() {
-        string todayKey = DateTime.Today.ToString("yyyy-MM-dd");      
+        string todayKey = DateTime.Today.ToString("yyyy-MM-dd");
+        
         // 1. Check cache first
         (Texture2D, string) cachedData = TryGetCachedImage(todayKey);
         if (cachedData.Item1 != null && cachedData.Item2 != null)
@@ -296,7 +328,7 @@ public class MasterController : MonoBehaviour
         }
     }
     
-    public IEnumerator UpdateDailyPortrait() {
+    public IEnumerator ShuffleRemoteDailyPortrait() {
         // 1. Get all portrait documents
         Task<QuerySnapshot> getAllTask = fbFirestore.Collection(FB_COLLECTION).GetSnapshotAsync();
         yield return new WaitUntil(() => getAllTask.IsCompleted);
@@ -364,6 +396,8 @@ public class MasterController : MonoBehaviour
         groundTruthAspectRatio = (float)groundTruthImage.width / (float)groundTruthImage.height;
         AspectRatioFitter fitter = mainImage.gameObject.GetComponentInChildren<AspectRatioFitter>();
         fitter.aspectRatio = groundTruthAspectRatio;
+        // update questionmark's too
+        backgroundQuestionMark.GetComponent<AspectRatioFitter>().aspectRatio = groundTruthAspectRatio;
         
         currentUnionedMatchedPixelCount = 0;
         nameHistory = new string[MAX_TEXT_TRIES];
@@ -509,23 +543,47 @@ public class MasterController : MonoBehaviour
     void HandleTextInput(string guessText)
     {
         if (nameGuessesMade >= MAX_TEXT_TRIES)
-            return;
-        Debug.Log("Guess: " + guessText);
-        if (guessText == groundTruthName)
         {
-            
+            // IMAGE_MATCH_PERCENTAGE_GOAL
+            string message = "Out of text tries!\nSee if you can get " + IMAGE_MATCH_PERCENTAGE_GOAL + "% image match!";
+            Color bannerColor = Color.yellow;
+            float duration = 2f;
+            OverlayBanner.Instance.ShowBanner(message, bannerColor, duration);
+            return;
+        }
+        
+        nameHistory[nameGuessesMade] = guessText;
+        nameGuessesMade += 1;
+        if (guessText.ToLower() == groundTruthName.ToLower())
+        {
+            EndGame(true);
         }
         else
         {
-            nameHistory[nameGuessesMade] = guessText;
-            nameGuessesMade += 1;
+            if (nameGuessesMade >= MAX_TEXT_TRIES && imageGuessesMade >= MAX_IMAGE_TRIES)
+            {
+                EndGame(false);
+            }
+            else
+            {
+                string message = "Incorrect guess.\nYou have " + (MAX_TEXT_TRIES - nameGuessesMade) + " text tries left.";
+                Color bannerColor = Color.red;
+                float duration = 2f;
+                OverlayBanner.Instance.ShowBanner(message, bannerColor, duration);
+            }
         }
     }
     
     void HandleImageInput(Texture2D image)
     {
         if (imageGuessesMade >= MAX_IMAGE_TRIES)
+        {
+            string message = "Out of image tries!\nSee if you can get the name right!";
+            Color bannerColor = Color.yellow;
+            float duration = 2f;
+            OverlayBanner.Instance.ShowBanner(message, bannerColor, duration);
             return;
+        }
         
         // VerifyImage updates imageMatchPercentage
         Texture2D matchingTexture = VerifyImage(image);
@@ -534,25 +592,26 @@ public class MasterController : MonoBehaviour
         imageHistory[imageGuessesMade].SetGuess(image, matchingTexture);
         imageGuessesMade += 1;
         
-        // Debug.Log("Image Match Percentage: " + imageMatchPercentage);
-        // Debug.Log("Image Match Percentage Goal: " + IMAGE_MATCH_PERCENTAGE_GOAL);
         if (imageMatchPercentage >= IMAGE_MATCH_PERCENTAGE_GOAL)
         {
             currentUnionedMatchImage.SetPixels(groundTruthImage.GetPixels());
             currentUnionedMatchImage.Apply();
+            EndGame(true);
         }
         else
         {
-            // Incorrect guess
+            if (nameGuessesMade >= MAX_TEXT_TRIES && imageGuessesMade >= MAX_IMAGE_TRIES)
+            {
+                EndGame(false);
+            }
+            else
+            {
+                string message = "Image match percentage: " + (imageMatchPercentage * 100) + "%\nYou have " + (MAX_IMAGE_TRIES - imageGuessesMade) + " image tries left.";
+                Color bannerColor = Color.red;
+                float duration = 2f;
+                OverlayBanner.Instance.ShowBanner(message, bannerColor, duration);
+            }
         }
-        
-        if (imageGuessesMade == MAX_IMAGE_TRIES)
-        {
-            // Game over
-            toCameraButton.onClick.RemoveAllListeners();
-            toCameraButton.interactable = false;
-        }
-        
     }
     
     void MonitorNameGuessInputEmptuness(string guessText)
