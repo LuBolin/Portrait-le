@@ -71,6 +71,19 @@ public class OverlayBanner : MonoBehaviour
         bannerText.enabled = active;
     }
 
+    // Untimed operations
+    
+    public void ShowBanner(string message, Color bannerColor)
+    {
+        if (currentBannerRoutine != null)
+            StopCoroutine(currentBannerRoutine);
+        currentBannerRoutine = null;
+
+        bannerText.text = message;
+        overlayBanner.color = bannerColor;
+        
+        SetBannerActive(true);
+    }
     
     public void HideBannerImmediately()
     {

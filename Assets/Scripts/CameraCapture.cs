@@ -189,10 +189,13 @@ public class CameraCapture : MonoBehaviour
             return;
         };
 
+
+        Debug.Log("AAAA");
         RectTransform rectTransform = rawImage.rectTransform;
         Canvas canvas = rawImage.canvas;
         Camera cam = canvas.worldCamera;
         
+        Debug.Log("BBBB");
         Vector3[] corners = new Vector3[4];
         // rectTransform.GetWorldCorners(corners);
         
@@ -211,6 +214,7 @@ public class CameraCapture : MonoBehaviour
             rectTransform.GetWorldCorners(corners);
         }
         
+        Debug.Log("CCCC");
 
         // Convert world corners to screen space
         Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
@@ -225,6 +229,10 @@ public class CameraCapture : MonoBehaviour
             controller.CameraGuessCallback(null);
         }
 
+        
+        Debug.Log("DDDD");
+        Debug.Log("rawimage canvas camera is null: " + rawImage.canvas.worldCamera == null);
+        
         RenderTexture rt = new RenderTexture(Screen.width, Screen.height, 24);
         Texture2D result = new Texture2D(width, height, TextureFormat.RGBA32, false);
 
@@ -237,11 +245,15 @@ public class CameraCapture : MonoBehaviour
         result.ReadPixels(new Rect(bottomLeft.x, bottomLeft.y, width, height), 0, 0);
         result.Apply();
 
+        Debug.Log("EEEE");
         cam.targetTexture = null;
         RenderTexture.active = null;
         Destroy(rt);
         
+        Debug.Log("FFFF");
         controller.CameraGuessCallback(result);
+        
+        Debug.Log("GGGG");
     }
     
     void SwitchCamera()
@@ -291,6 +303,7 @@ public class CameraCapture : MonoBehaviour
         if (webcamTexture.width <= 100 || !webcamTexture.isPlaying)
         {
             Debug.LogWarning("Webcam failed to initialize within timeout.");
+            OverlayBanner.Instance.ShowBanner("Camera failed to initialize", Color.red, 5f);
             // controller.CameraGuessCallback(null);
             yield break;
         }
@@ -345,7 +358,7 @@ public class CameraCapture : MonoBehaviour
 
     public void Initialize(float aspectRatio, Camera canvasCamera, MasterController controller)
     {
-
+        Debug.Log("Initializing with camera: " + canvasCamera.name);
         canvas.worldCamera = canvasCamera;
         this.controller = controller;
         
@@ -382,6 +395,8 @@ public class CameraCapture : MonoBehaviour
             Debug.Log("Gravity sensor IS supported on this device.");
         else
             Debug.LogWarning("Gravity sensor IS NOT supported on this device.");
+        
+        Debug.Log("rawimage canvas camera is null: " + rawImage.canvas.worldCamera == null);
     }
 
     
@@ -398,6 +413,7 @@ public class CameraCapture : MonoBehaviour
         if (cameras.Length == 0)
         {
             Debug.LogError("No cameras found");
+            OverlayBanner.Instance.ShowBanner("No cameras found", Color.red, 5f);
             return;
         }
         
@@ -441,6 +457,7 @@ public class CameraCapture : MonoBehaviour
     private void PermissionCallbacksPermissionDenied(string permissionName)
     {
         Debug.LogWarning($"Permission {permissionName} Denied");
+        OverlayBanner.Instance.ShowBanner("Camera permission denied", Color.red, 5f);
     }
 
     private void PermissionCallbacksPermissionGranted(string permissionName)
