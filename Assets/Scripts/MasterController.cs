@@ -61,6 +61,7 @@ public class MasterController : MonoBehaviour
     private Button guessNameButton;
     private GameObject cameraCaptureOPrefabInstance;
     private MainMenu mainMenu;
+    private Button toMainMenuButton;
     
     // Database
     private const string PORTRAIT_DATA_PATH = "Portraits";
@@ -146,6 +147,7 @@ public class MasterController : MonoBehaviour
         imageHistoryParent = GameObject.Find("ImageHistoryParent").transform;
         guessNameInput = GameObject.Find("GuessNameInput").GetComponent<TMP_InputField>();
         guessNameButton = GameObject.Find("GuessNameButton").GetComponent<Button>();
+        toMainMenuButton = GameObject.Find("ToMainMenuButton").GetComponent<Button>();
         
         IsNullCheck(canvas);
         IsNullCheck(mainImage);
@@ -197,6 +199,7 @@ public class MasterController : MonoBehaviour
             guessNameInput.text = string.Empty;
             HandleTextInput(guessText);
         });
+        toMainMenuButton.onClick.AddListener(ToMainMenu);
     }
 
     
@@ -425,6 +428,11 @@ public class MasterController : MonoBehaviour
         currentUnionedMatchImage.Apply();
         
         mainImage.texture = currentUnionedMatchImage;
+        
+        toCameraButton.interactable = true;
+        guessNameInput.text = "";
+        guessNameInput.interactable = true;
+        guessNameButton.interactable = false;
     }
     
     Texture2D VerifyImage(Texture2D image)
@@ -616,7 +624,7 @@ public class MasterController : MonoBehaviour
                 float roundedPercentage = Mathf.Round(imageMatchPercentage * 10000f) / 100f;
                 newProgress = Mathf.Round(newProgress * 10000f) / 100f;
                 // string message = "Image match percentage: " + roundedPercentage + "%\nYou have " + (MAX_IMAGE_TRIES - imageGuessesMade) + " image tries left.";
-                string message = "Image match percentage: " + imageMatchPercentage + "%";
+                string message = "Image match percentage: " + roundedPercentage + "%";
                 message += "\nGains this guess: " + newProgress + "%";
                 message += "\nYou have " + (MAX_IMAGE_TRIES - imageGuessesMade) + " image tries left.";
                 Color bannerColor = Color.red;
@@ -662,6 +670,23 @@ public class MasterController : MonoBehaviour
 
         Destroy(cameraCaptureOPrefabInstance);
         cameraCaptureOPrefabInstance = null;
+    }
+    
+    void ToMainMenu()
+    {
+        string bannerMessage = "Returning to main menu...";
+        Color bannerColor = Color.yellow;
+        OverlayBanner.Instance.ShowBanner(bannerMessage, bannerColor, BANNER_INFO_DURATION);
+        
+        // wait for BANNER_ENDGAME_DURATION, then "reload" the game
+        IEnumerator EndGameTransition()
+        {
+            yield return new WaitForSeconds(BANNER_INFO_DURATION);
+            
+            mainMenu.Restart();
+        }
+        
+        StartCoroutine(EndGameTransition());
     }
     
     #endregion
